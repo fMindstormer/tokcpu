@@ -3,6 +3,11 @@
 Rung 2, `compile_program`: one program becomes one tokenizer. The program counter lives in the
 machine's state, so each Brainfuck instruction is one tick; printing walks the byte to the output.
 
+Printing carries a byte in two trips, one per nibble: the high nibble goes left and waits before ┃ as
+a circled hex digit (⓪ to ⓕ), the head goes back to read the cell again, and the low nibble joins it.
+Carrying all 8 bits at once would need 256 carrying states, each with a rule for every symbol it
+walks over; two trips need 32.
+
     tape:  ⊢ OUTPUT ┃ DATA ⊣        the head sits at the data pointer
 
 Rung 3, `universal`: one tokenizer for every program. The program is written on the tape and the head
@@ -23,6 +28,7 @@ from .machine import LEFT, RIGHT, Machine
 OPS = "+-<>[].,"
 OUT_END, PROG_END = "┃", "║"       # ┃ after the output, ║ after the program
 IP, DP = "▼", "▲"                  # ▼ instruction pointer, ▲ data pointer (rung 3)
+HALF = "⓪①②③④⑤⑥⑦⑧⑨ⓐⓑⓒⓓⓔⓕ"          # a printed byte's high nibble, waiting for its low one
 
 
 def cell(v: int) -> str:
@@ -172,8 +178,8 @@ def compile_program(program: str) -> tuple[Machine, str]:
             elif c == "]":
                 m.on(P[i], a, a, "S", P[pair[i] + 1] if v != 0 else P[i + 1], sides=sd)
             elif c == ".":
-                # leave this print site's mark before the cell and carry the byte left
-                out = m.L(f"C{v}") + mark[i] + a
+                # leave this print site's mark before the cell and carry the high nibble left
+                out = m.L(f"H{v >> 4}") + mark[i] + a
                 for s in sd:
                     if s == "R":
                         m.rule(m.R(P[i]) + a, out)
@@ -182,11 +188,26 @@ def compile_program(program: str) -> tuple[Machine, str]:
                     else:
                         m.rule(a + m.L(P[i]), out)
     if prints:
-        for v in range(256):                            # carry byte v left over the data
-            C = m.L(f"C{v}")
-            for u in range(256):
-                m.rule(cell(u) + C, C + cell(u))
-            m.rule(OUT_END + C, out_char(v) + OUT_END + m.R("B"))     # print it, walk back
+        cells, marks = [cell(u) for u in range(256)], list(mark.values())
+        m.symbol(*HALF)
+        for h in range(16):                             # carry the high nibble left over the data
+            H = m.L(f"H{h}")
+            for c in cells:
+                m.rule(c + H, H + c)
+            m.rule(OUT_END + H, HALF[h] + OUT_END + m.R("RE"))      # leave it, go back to the mark
+        for c in cells:
+            m.rule(m.R("RE") + c, c + m.R("RE"))
+            m.rule(m.R("LO") + c, m.L(f"Lo{cell_value(c) & 15}") + c)  # read the cell again
+        for k in marks:
+            m.rule(m.R("RE") + k, k + m.R("LO"))
+        for lo in range(16):                            # carry the low nibble left and join them
+            Lo, J = m.L(f"Lo{lo}"), m.L(f"J{lo}")
+            for c in cells + marks:
+                m.rule(c + Lo, Lo + c)
+            m.rule(OUT_END + Lo, J + OUT_END)
+            for h in range(16):
+                m.rule(HALF[h] + J, out_char(16 * h + lo) + m.R("B"))  # print it, walk back
+        m.rule(m.R("B") + OUT_END, OUT_END + m.R("B"))
         for u in range(256):
             m.rule(m.R("B") + cell(u), cell(u) + m.R("B"))
         for i in prints:
@@ -206,10 +227,11 @@ def universal() -> Machine:
     """Fetch: F reads the instruction after ▼ and G carries it right to ▲. Execute: E changes the cell,
     moves ▲, or starts a print or a jump. Return: BK walks back to ▼ and ADV moves ▼ one instruction on.
     Jumps scan with the loop depth held in the state (D going right, U going left). A print carries the
-    byte (C) left to the output, then FD walks back to ▼."""
+    high nibble (H) left to the output, RE walks back to ▲, LO reads the cell again, the low nibble (Lo)
+    goes left and J joins the two; then FD walks back to ▼."""
     m = Machine("universal brainfuck interpreter", blank=cell(0))
     cells = [cell(v) for v in range(256)]
-    m.symbol(OUT_END, PROG_END, IP, DP, *cells, *(out_char(v) for v in range(256)), *UOPS)
+    m.symbol(OUT_END, PROG_END, IP, DP, *cells, *(out_char(v) for v in range(256)), *UOPS, *HALF)
     R, L = m.R, m.L
     m.state("F")
     for X in UOPS:                                       # fetch
@@ -224,7 +246,7 @@ def universal() -> Machine:
         m.rule(R("E-") + a, L("BK") + DP + cell(v - 1))
         m.rule(R("E>") + a, a + R("N"))
         m.rule(R("E<") + a, L("P") + a)
-        m.rule(R("E.") + a, L(f"C{v}") + DP + a)
+        m.rule(R("E.") + a, L(f"H{v >> 4}") + DP + a)
         m.rule(R("E[") + a, (L("BKJ") if v == 0 else L("BK")) + DP + a)
         m.rule(R("E]") + a, (L("BKB") if v != 0 else L("BK")) + DP + a)
         m.rule(R("N") + a, L("BK") + DP + a)             # > : mark the next cell...
@@ -259,11 +281,25 @@ def universal() -> Machine:
                 m.rule(X + U, X + IP + R("F") if d == 1 else L(f"U{d - 1}") + X)
             else:
                 m.rule(X + U, U + X)
-    for v in range(256):                                 # print: carry the byte left to ┃
-        C = L(f"C{v}")
-        for c in list(UOPS) + [PROG_END, IP] + cells:
-            m.rule(c + C, C + c)
-        m.rule(OUT_END + C, out_char(v) + OUT_END + R("FD"))
+    walk = list(UOPS) + [PROG_END, IP] + cells
+    for h in range(16):                                  # print: carry the high nibble left to ┃
+        H = L(f"H{h}")
+        for c in walk:
+            m.rule(c + H, H + c)
+        m.rule(OUT_END + H, HALF[h] + OUT_END + R("RE"))  # leave it there, go back to ▲
+    for c in walk:
+        m.rule(R("RE") + c, c + R("RE"))
+    m.rule(R("RE") + DP, DP + R("LO"))
+    for v in range(256):                                 # read the cell again
+        m.rule(R("LO") + cells[v], L(f"Lo{v & 15}") + cells[v])
+    for lo in range(16):                                 # carry the low nibble left and join them
+        Lo, J = L(f"Lo{lo}"), L(f"J{lo}")
+        for c in walk + [DP]:
+            m.rule(c + Lo, Lo + c)
+        m.rule(OUT_END + Lo, J + OUT_END)
+        for h in range(16):
+            m.rule(HALF[h] + J, out_char(16 * h + lo) + R("FD"))
+    m.rule(R("FD") + OUT_END, OUT_END + R("FD"))
     for X in UOPS:                                       # and walk back to ▼
         m.rule(R("FD") + X, X + R("FD"))
     m.rule(R("FD") + IP, R("ADV"))

@@ -193,8 +193,8 @@ while (nxt := <b>tok.decode(tok.encode(tape))</b>) != tape:
   <section>
     <h2>The ladder</h2>
     <p><b>Rung 1, small machines.</b> A binary counter (7 rules) and the 4-state busy beaver (24 rules), which halts after exactly 107 ticks with 13 ones on the tape, its known record.</p>
-    <p><b>Rung 2, one program per tokenizer.</b> A compiler turns a Brainfuck program into a machine whose states are the program. Each instruction is one tick, and printing walks the byte to the output at the left of the tape. Hello World becomes 94,843 rules and prints in 1,024 ticks.</p>
-    <p><b>Rung 3, one tokenizer for every program.</b> A universal interpreter of 73,968 rules. The program is written on the tape. The head carries each instruction from <code>▼</code>, the instruction pointer, to <code>▲</code>, the data pointer, executes it there and walks back. Data cells are Braille characters, whose dots spell the byte. Loops can nest 64 deep; input (<code>,</code>) is not supported.</p>
+    <p><b>Rung 2, one program per tokenizer.</b> A compiler turns a Brainfuck program into a machine whose states are the program. Each instruction is one tick, and printing walks the byte to the output at the left of the tape, one nibble at a time. Hello World becomes 38,265 rules and prints in 1,194 ticks.</p>
+    <p><b>Rung 3, one tokenizer for every program.</b> A universal interpreter of 15,179 rules. The program is written on the tape. The head carries each instruction from <code>▼</code>, the instruction pointer, to <code>▲</code>, the data pointer, executes it there and walks back. Data cells are Braille characters, whose dots spell the byte. Loops can nest 64 deep; input (<code>,</code>) is not supported.</p>
   </section>
 
   <section>
@@ -203,11 +203,11 @@ while (nxt := <b>tok.decode(tok.encode(tape))</b>) != tape:
       <thead><tr><th>Tokenizer</th><th>Merge rules</th><th>File</th><th>Program</th><th>Ticks</th></tr></thead>
       <tbody>
         <tr><td>4-state busy beaver</td><td class="num">24</td><td class="num">4 KB</td><td>itself</td><td class="num">107</td></tr>
-        <tr><td>Hello World, compiled</td><td class="num">94,843</td><td class="num">14.3 MB</td><td>Hello World</td><td class="num">1,024</td></tr>
-        <tr><td rowspan="4">Universal Brainfuck</td><td class="num" rowspan="4">73,968</td><td class="num" rowspan="4">11.1 MB</td><td>Hello World</td><td class="num">151,159</td></tr>
-        <tr><td>Alphabet</td><td class="num">23,433</td></tr>
-        <tr><td>Grid (nested loops)</td><td class="num">15,428</td></tr>
-        <tr><td>Jumps (skipped and nested)</td><td class="num">21,313</td></tr>
+        <tr><td>Hello World, compiled</td><td class="num">38,265</td><td class="num">5.7 MB</td><td>Hello World</td><td class="num">1,194</td></tr>
+        <tr><td rowspan="4">Universal Brainfuck</td><td class="num" rowspan="4">15,179</td><td class="num" rowspan="4">2.3 MB</td><td>Hello World</td><td class="num">154,137</td></tr>
+        <tr><td>Alphabet</td><td class="num">27,053</td></tr>
+        <tr><td>Grid (nested loops)</td><td class="num">17,474</td></tr>
+        <tr><td>Jumps (skipped and nested)</td><td class="num">21,415</td></tr>
       </tbody>
     </table></div>
     <p class="small">Clock speed on the universal tokenizer running Hello World: about 9,600 ticks a second with the <code>tokenizers</code> library, 5,900 through <code>transformers</code>' AutoTokenizer, and 10,000 with transformers.js in Node, on one core of a cloud machine. Every tick of every run in the test suite is checked against the machine's own rules, and every output against a plain Brainfuck interpreter, in Python and in transformers.js.</p>
@@ -227,6 +227,7 @@ python -m tokcpu run tokenizers/4-state-busy-beaver --show 1</pre>
 <script type="module">
 const $ = (id) => document.getElementById(id);
 const LEFT = "⊢", RIGHT = "⊣", OUT_END = "┃", PROG_END = "║", IP = "▼", DP = "▲";
+const HALF = "⓪①②③④⑤⑥⑦⑧⑨ⓐⓑⓒⓓⓔⓕ";   // a printed byte's high nibble, waiting for its low one
 const PRESETS = {
   "Hello World": "++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++.",
   "Alphabet": ">++++++++[<++++++++>-]<+>>++++++[<++++>-]<++[<.+>-]++++++++++.",
@@ -254,7 +255,7 @@ function outByte(c) {
 function readOutput(t) {
   const a = t.indexOf(LEFT), b = t.indexOf(OUT_END);
   if (a < 0 || b < 0) return null;
-  return Array.from(t.slice(a + 1, b)).map((c) => String.fromCharCode(outByte(c))).join("");
+  return Array.from(t.slice(a + 1, b)).filter((c) => !HALF.includes(c)).map((c) => String.fromCharCode(outByte(c))).join("");
 }
 function cleanProgram(src) {
   const p = Array.from(src).filter((c) => "+-<>[].,".includes(c)).join("");

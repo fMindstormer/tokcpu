@@ -19,7 +19,7 @@ from transformers import AutoTokenizer
 
 tok = AutoTokenizer.from_pretrained("{repo}")
 tape = open(hf_hub_download("{repo}", "start.txt"), encoding="utf-8").read()
-while (nxt := tok.decode(tok.encode(tape))) != tape:   # 151,159 ticks
+while (nxt := tok.decode(tok.encode(tape))) != tape:   # 154,137 ticks
     tape = nxt
 print(tape)
 ```
@@ -48,8 +48,8 @@ The full explanation, the compiler and the tests are on GitHub: https://github.c
 
 | Folder | Machine | Merge rules |
 |---|---|---:|
-| (root) | universal Brainfuck interpreter: runs any program written on the tape | 73,968 |
-| `hello`, `alphabet`, `grid`, `jumps` | one Brainfuck program compiled into each tokenizer | 80,955 – 94,843 |
+| (root) | universal Brainfuck interpreter: runs any program written on the tape | 15,179 |
+| `hello`, `alphabet`, `grid`, `jumps` | one Brainfuck program compiled into each tokenizer | 24,173 – 38,265 |
 | `4-state-busy-beaver` | the 4-state busy beaver: halts after 107 ticks with 13 ones | 24 |
 | `binary-counter` | counts in binary forever | 7 |
 

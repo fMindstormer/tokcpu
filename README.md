@@ -75,25 +75,30 @@ three lines of Python, the same way "CSS is Turing complete" demos need someone 
 |---|---|---:|---:|---|---:|
 | 1 | binary counter | 7 | 1.5 KB | counts forever | |
 | 1 | 4-state busy beaver | 24 | 4 KB | itself | 107 |
-| 2 | Hello World, compiled | 94,843 | 14.3 MB | Hello World | 1,024 |
-| 2 | alphabet, compiled | 85,066 | 12.8 MB | alphabet | 392 |
-| 2 | grid, compiled | 82,239 | 12.4 MB | grid | 321 |
-| 2 | jumps, compiled | 80,955 | 12.2 MB | jumps | 519 |
-| 3 | universal Brainfuck | 73,968 | 11.1 MB | Hello World | 151,159 |
-| 3 | | | | alphabet | 23,433 |
-| 3 | | | | grid (nested loops) | 15,428 |
-| 3 | | | | jumps (skipped and nested) | 21,313 |
+| 2 | Hello World, compiled | 38,265 | 5.7 MB | Hello World | 1,194 |
+| 2 | alphabet, compiled | 28,301 | 4.2 MB | alphabet | 556 |
+| 2 | grid, compiled | 25,474 | 3.8 MB | grid | 477 |
+| 2 | jumps, compiled | 24,173 | 3.6 MB | jumps | 531 |
+| 3 | universal Brainfuck | 15,179 | 2.3 MB | Hello World | 154,137 |
+| 3 | | | | alphabet | 27,053 |
+| 3 | | | | grid (nested loops) | 17,474 |
+| 3 | | | | jumps (skipped and nested) | 21,415 |
 
 - **Rung 1, small machines** (`tokcpu/small.py`). Any Turing machine given as a table. The 4-state busy
   beaver halts after exactly 107 ticks with 13 ones on the tape, its known record.
 - **Rung 2, one program per tokenizer** (`compile_program` in `tokcpu/bf.py`). A Brainfuck program
   compiles into a machine whose states are the program: each instruction is one tick. Printing leaves
-  a mark at the data pointer, carries the byte left to the output (one state per byte value) and walks
-  back to the mark.
+  a mark at the data pointer, carries the byte left to the output and walks back to the mark.
 - **Rung 3, one tokenizer for every program** (`universal` in `tokcpu/bf.py`). The program is written
   on the tape. The head carries each instruction from `▼` (the instruction pointer) to `▲` (the data
   pointer), executes it there, and walks back. Jumps scan for the matching bracket with the loop depth
   held in the state, up to 64 levels.
+
+Both rungs print a byte in two trips, one per nibble. The high nibble goes left and waits before `┃`
+as a circled hex digit (`⓪` to `ⓕ`); the head goes back, reads the cell again, and the low nibble
+joins it. Carrying the whole byte at once would take 256 carrying states, each with a rule for every
+symbol it walks over: that was 92% of the universal tokenizer's rules. Two trips take 32 states, which
+cut it from 73,968 rules (11.1 MB) to 15,179 (2.3 MB) for 2% more ticks.
 
 Brainfuck details: cells are bytes that wrap; the data tape grows to the right as needed; moving left
 of cell 0 stops the machine; input (`,`) is not supported. Data cells are Braille characters (U+2800 +
