@@ -8,3 +8,6 @@ tokenizers/*/tokenizer.json
 !tokenizers/binary-counter/tokenizer.json
 !tokenizers/4-state-busy-beaver/tokenizer.json
 web/tok/*/tokenizer.json
+
+# `python -m tokcpu hub` stages the Hub upload here
+build/

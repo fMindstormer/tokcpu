@@ -1,0 +1,4 @@
+tokenizers>=0.22
+transformers>=4.57      # only for --auto and the AutoTokenizer test
+huggingface_hub>=0.36   # only for `python -m tokcpu hub --push`
+pytest

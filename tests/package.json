@@ -1,0 +1,7 @@
+{
+  "private": true,
+  "description": "transformers.js, for the tick-for-tick JavaScript check in test_tokcpu.py",
+  "dependencies": {
+    "@huggingface/transformers": "3.7.6"
+  }
+}

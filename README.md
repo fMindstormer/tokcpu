@@ -1,5 +1,7 @@
 # Tokenizer CPU
 
+[![test](https://github.com/fMindstormer/tokcpu/actions/workflows/test.yml/badge.svg)](https://github.com/fMindstormer/tokcpu/actions/workflows/test.yml)
+
 A stock Hugging Face tokenizer that runs Brainfuck. It is a plain `tokenizer.json`, with no custom
 code and no model. Every clock tick is one encode and one decode:
 
@@ -74,6 +76,9 @@ three lines of Python, the same way "CSS is Turing complete" demos need someone 
 | 1 | binary counter | 7 | 1.5 KB | counts forever | |
 | 1 | 4-state busy beaver | 24 | 4 KB | itself | 107 |
 | 2 | Hello World, compiled | 94,843 | 14.3 MB | Hello World | 1,024 |
+| 2 | alphabet, compiled | 85,066 | 12.8 MB | alphabet | 392 |
+| 2 | grid, compiled | 82,239 | 12.4 MB | grid | 321 |
+| 2 | jumps, compiled | 80,955 | 12.2 MB | jumps | 519 |
 | 3 | universal Brainfuck | 73,968 | 11.1 MB | Hello World | 151,159 |
 | 3 | | | | alphabet | 23,433 |
 | 3 | | | | grid (nested loops) | 15,428 |
@@ -110,19 +115,22 @@ Speed does not depend on the number of rules; it falls slowly as the tape gets l
 
 ## Checking it
 
-`python -m pytest tests` (about 40 seconds):
+`python -m pytest tests` (about a minute; CI runs it on every push):
 
 - every tick of every run is compared with the machine's own rules applied directly (`Machine.step`);
 - every Brainfuck output is compared with a plain interpreter (`interpret` in `tokcpu/bf.py`), for each
   program on both rung 2 and rung 3;
 - the files survive the library's own save and reload, and run through `transformers`' AutoTokenizer;
-- with transformers.js installed (`cd tests && npm install @huggingface/transformers@3.7.6`), the
-  compiled Hello World runs tick for tick the same in JavaScript.
+- with transformers.js installed (`cd tests && npm install`), the compiled Hello World runs tick for
+  tick the same in JavaScript.
+
+Tested with `tokenizers` 0.22 and 0.23, `transformers` 4.57 and 5.20, and transformers.js 3.7.6, on
+Python 3.13. CI also runs Python 3.10.
 
 ## Run it
 
 ```
-pip install tokenizers transformers
+pip install -r requirements.txt
 python -m tokcpu build                                    # writes every tokenizer into tokenizers/
 python -m tokcpu run tokenizers/brainfuck programs/hello.bf
 python -m tokcpu run tokenizers/brainfuck programs/grid.bf --auto      # through AutoTokenizer
@@ -131,7 +139,12 @@ python -m tokcpu run tokenizers/hello                     # the compiled one; st
 ```
 
 Each folder in `tokenizers/` holds `tokenizer.json` and `tokenizer_config.json`, so it loads with
-`AutoTokenizer.from_pretrained` and can go on the Hugging Face Hub like any other tokenizer.
+`AutoTokenizer.from_pretrained` and can go on the Hugging Face Hub like any other tokenizer. The build
+is deterministic and takes under a second, so git keeps only the two small machines' files.
+
+`python -m tokcpu hub your-name/tokcpu` stages all of them as one Hub repo in `build/hub`: the universal
+tokenizer at the root, with Hello World's tape as `start.txt`, and the others in subfolders. `--push`
+uploads it.
 
 ## Files
 
@@ -140,8 +153,13 @@ tokcpu/machine.py     the machine model: one head on a string tape, two-characte
 tokcpu/compile.py     machine -> tokenizer.json (BPE merges, added tokens, the tag-deleting decoder)
 tokcpu/small.py       rung 1: a binary counter, the 4-state busy beaver, any Turing machine table
 tokcpu/bf.py          rungs 2 and 3: the Brainfuck compiler, the universal interpreter, a reference interpreter
-tokcpu/__main__.py    build and run
+tokcpu/__main__.py    build, run, and stage the Hub repo
+tokcpu/hub_card.md    the Hub repo's model card
 programs/             hello, alphabet, grid, jumps
 tests/                the checks above, and the transformers.js runner
 web/                  the interactive page; `build` copies its tokenizers into web/tok/
 ```
+
+## License
+
+MIT, see [LICENSE](LICENSE).
