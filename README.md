@@ -21,6 +21,10 @@ written there too:
  └── output ──┘ └──────────────────────────────── the program ───────────────────────────────────────┘  └─ memory ─┘
 ```
 
+**On the Hugging Face Hub:** [fMindstormer/tokcpu](https://huggingface.co/fMindstormer/tokcpu), so
+`AutoTokenizer.from_pretrained("fMindstormer/tokcpu")` loads the universal tokenizer, with Hello World's
+tape in its `start.txt`.
+
 **Interactive page:** https://claude.ai/artifact/GXyttZQHii8GFLEjKhMZe9 (private until you share it from
 its Share menu). It runs these same files in the browser with transformers.js, and compiles Turing
 machines you type into new tokenizers you can download.
