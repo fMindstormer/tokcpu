@@ -1,0 +1,1 @@
+{"markers":{"ⓐ":["A","R"],"Ⓐ":["A","L"],"ⓑ":["B","R"],"Ⓑ":["B","L"],"ⓒ":["C","R"],"Ⓒ":["C","L"],"ⓓ":["D","R"],"Ⓓ":["D","L"],"ⓔ":["H","R"],"Ⓔ":["H","L"]},"rules":24,"bytes":3903,"config":{"tokenizer_class":"PreTrainedTokenizerFast","clean_up_tokenization_spaces":false,"model_max_length":1000000000},"start":"⊢ⓐ⊣"}

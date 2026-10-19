@@ -1,0 +1,1 @@
+{"markers":{"ⓐ":["inc","R"],"Ⓐ":["inc","L"],"ⓑ":["ret","R"],"Ⓑ":["ret","L"]},"rules":7,"bytes":1486,"config":{"tokenizer_class":"PreTrainedTokenizerFast","clean_up_tokenization_spaces":false,"model_max_length":1000000000},"start":"⊢ⓑ0#⊣"}

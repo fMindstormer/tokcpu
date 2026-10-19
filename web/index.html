@@ -1,0 +1,455 @@
+<title>Tokenizer CPU</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Instrument+Sans:ital,wght@0,400;0,600;1,400&family=Martian+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: a tokenizer playground turned into a machine room. The tape is drawn the way tokenizer
+   viewers draw text, as coloured token chips; the one two-character chip is the machine's head. */
+:root {
+  --paper: #edf1f7;
+  --sheet: #ffffff;
+  --ink: #131c33;
+  --muted: #56617d;
+  --line: #d4dbe7;
+  --head: #e0540d;
+  --head-ink: #ffffff;
+  --chip-a: #dce7fb;
+  --chip-b: #e6f3e2;
+  --chip-out: #fff4d8;
+  --chip-ptr: #f9d9e4;
+  --chip-edge: #e4e7ee;
+  --code-bg: #f4f6fb;
+  --ok: #1f7a46;
+  --bad: #b3261e;
+  --display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", sans-serif;
+  --text: "Instrument Sans", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --mono: "Martian Mono", "DejaVu Sans Mono", "Menlo", "Consolas", monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0e1320; --sheet: #161d2e; --ink: #e6ebf6; --muted: #9ba7c3; --line: #2a3450;
+    --head: #ff7a3d; --head-ink: #1a0b02; --chip-a: #22324f; --chip-b: #1f3a2c; --chip-out: #3b3218;
+    --chip-ptr: #4a2232; --chip-edge: #262d3d; --code-bg: #10172a; --ok: #6fd39a; --bad: #ff8a80;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0e1320; --sheet: #161d2e; --ink: #e6ebf6; --muted: #9ba7c3; --line: #2a3450;
+  --head: #ff7a3d; --head-ink: #1a0b02; --chip-a: #22324f; --chip-b: #1f3a2c; --chip-out: #3b3218;
+  --chip-ptr: #4a2232; --chip-edge: #262d3d; --code-bg: #10172a; --ok: #6fd39a; --bad: #ff8a80;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--paper); color: var(--ink); font: 17px/1.6 var(--text); }
+.wrap { max-width: 1080px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+header.wrap { padding-block: 3.2rem 1.6rem; display: grid; gap: 1rem; }
+.eyebrow { font: 600 0.72rem/1.4 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+h1 { font: 800 clamp(2.6rem, 7vw, 4.6rem)/0.95 var(--display); margin: 0; letter-spacing: -0.02em; text-wrap: balance; }
+h2 { font: 700 1.7rem/1.15 var(--display); margin: 0; text-wrap: balance; }
+h3 { font: 700 1.1rem/1.3 var(--display); margin: 0; }
+p { margin: 0; }
+.lede { font-size: 1.2rem; max-width: 40rem; }
+.loop { font: 400 0.95rem/1.7 var(--mono); background: var(--sheet); border: 1px solid var(--line); border-radius: 10px;
+  padding: 0.9rem 1.1rem; max-width: 40rem; overflow-x: auto; white-space: pre; }
+.loop b { color: var(--head); font-weight: 600; }
+
+/* the machine */
+.bench { background: var(--sheet); border: 1px solid var(--line); border-radius: 14px; padding: 1.2rem;
+  display: grid; gap: 1rem; }
+.row { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; }
+.seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
+.seg button { border: 0; background: transparent; color: var(--ink); font: 600 0.85rem var(--text); padding: 0.45rem 0.95rem; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+button.act { font: 600 0.9rem var(--text); border: 1px solid var(--ink); background: var(--ink); color: var(--paper);
+  border-radius: 999px; padding: 0.45rem 1.1rem; cursor: pointer; }
+button.act.ghost { background: transparent; color: var(--ink); }
+button:focus-visible, select:focus-visible, textarea:focus-visible { outline: 3px solid var(--head); outline-offset: 2px; }
+button:disabled { opacity: 0.45; cursor: default; }
+select { font: 0.85rem var(--text); color: var(--ink); background: var(--sheet); border: 1px solid var(--line); border-radius: 8px; padding: 0.35rem 0.5rem; }
+label.small, .small { font-size: 0.82rem; color: var(--muted); }
+.prog { display: grid; gap: 0.4rem; }
+textarea { width: 100%; min-height: 4.6rem; font: 0.8rem/1.5 var(--mono); color: var(--ink); background: var(--code-bg);
+  border: 1px solid var(--line); border-radius: 8px; padding: 0.6rem; resize: vertical; word-break: break-all; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); gap: 0.8rem; }
+.stat b { display: block; font: 700 1.5rem/1.1 var(--display); font-variant-numeric: tabular-nums; }
+.stat span { font-size: 0.8rem; color: var(--muted); }
+.tape { display: flex; flex-wrap: wrap; gap: 3px; font: 0.95rem/1 var(--mono); min-height: 2.4rem; align-content: flex-start;
+  padding: 0.7rem; background: var(--code-bg); border-radius: 10px; border: 1px solid var(--line); }
+.tape .c { display: inline-flex; align-items: center; justify-content: center; min-width: 1.35em; height: 1.75em;
+  padding: 0 0.2em; border-radius: 4px; background: var(--chip-a); white-space: pre; }
+.tape .c.cell { background: var(--chip-b); }
+.tape .c.out { background: var(--chip-out); }
+.tape .c.ptr { background: var(--chip-ptr); }
+.tape .c.edge { background: var(--chip-edge); color: var(--muted); }
+.tape .c.head { background: var(--head); color: var(--head-ink); font-weight: 600; gap: 0.35em; padding: 0 0.45em; }
+.tape .c.head i { font: 600 0.62rem var(--mono); font-style: normal; opacity: 0.9; }
+.tape .c.halt { outline: 2px dashed var(--head); background: transparent; color: var(--head); }
+.why { font: 0.78rem/1.6 var(--mono); color: var(--muted); overflow-x: auto; white-space: nowrap; }
+.why b { color: var(--ink); font-weight: 600; }
+.outbox { font: 600 1.15rem/1.4 var(--mono); white-space: pre-wrap; word-break: break-all; min-height: 1.6rem; }
+.status { font: 600 0.8rem var(--mono); }
+.status.err { color: var(--bad); }
+.status.ok { color: var(--ok); }
+
+/* the write-up */
+main.wrap { display: grid; gap: 2.6rem; padding-block: 2.4rem 3.5rem; }
+section { display: grid; gap: 0.9rem; max-width: 46rem; }
+section p { max-width: 42rem; }
+code { font: 0.86em var(--mono); background: var(--code-bg); padding: 0.05em 0.3em; border-radius: 4px; }
+pre { font: 0.82rem/1.6 var(--mono); background: var(--sheet); border: 1px solid var(--line); border-radius: 10px;
+  padding: 0.9rem 1rem; overflow-x: auto; margin: 0; }
+.steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 0.8rem; max-width: none; }
+.steps div { background: var(--sheet); border: 1px solid var(--line); border-radius: 10px; padding: 0.9rem; display: grid; gap: 0.35rem; align-content: start; }
+.steps .n { font: 600 0.7rem var(--mono); color: var(--head); letter-spacing: 0.06em; text-transform: uppercase; }
+.steps p { font-size: 0.92rem; }
+.tablewrap { overflow-x: auto; max-width: 100%; }
+table { border-collapse: collapse; font-size: 0.9rem; min-width: 34rem; }
+th, td { text-align: left; padding: 0.45rem 0.8rem 0.45rem 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font: 600 0.72rem var(--mono); letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
+td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+footer.wrap { padding-block: 1.5rem 3rem; color: var(--muted); font-size: 0.85rem; border-top: 1px solid var(--line); }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto; } }
+</style>
+
+<header class="wrap">
+  <p class="eyebrow">A stock Hugging Face tokenizer, used as a computer</p>
+  <h1>Tokenizer CPU</h1>
+  <p class="lede">This tokenizer runs Brainfuck. It is a plain <code>tokenizer.json</code>: no custom code, no model. Every clock tick is one call to encode and one to decode:</p>
+  <div class="loop">tok = AutoTokenizer.from_pretrained("tokenizers/brainfuck")
+while (nxt := <b>tok.decode(tok.encode(tape))</b>) != tape:
+    tape = nxt</div>
+</header>
+
+<div class="wrap">
+  <div class="bench" id="bench">
+    <div class="row">
+      <div class="seg" role="group" aria-label="Machine" id="machines"></div>
+    </div>
+    <div class="prog" id="progbox">
+      <div class="row">
+        <label class="small" for="preset">Program</label>
+        <select id="preset"></select>
+        <span class="small">or type your own: <code>+ - &lt; &gt; [ ] .</code></span>
+      </div>
+      <textarea id="program" spellcheck="false" aria-label="Brainfuck program"></textarea>
+    </div>
+    <div class="row">
+      <button class="act" id="run">Run</button>
+      <button class="act ghost" id="step">Step</button>
+      <button class="act ghost" id="reset">Reset</button>
+      <label class="small" for="speed">Speed</label>
+      <select id="speed">
+        <option value="1">1 tick a frame</option>
+        <option value="20">20 ticks a frame</option>
+        <option value="400">400 ticks a frame</option>
+        <option value="0" selected>as fast as it goes</option>
+      </select>
+      <span class="status" id="status">loading transformers.js…</span>
+    </div>
+    <div class="stats">
+      <div class="stat"><b id="ticks">0</b><span>ticks</span></div>
+      <div class="stat"><b id="rate">–</b><span>ticks a second, here</span></div>
+      <div class="stat"><b id="rules">–</b><span>merge rules in the file</span></div>
+      <div class="stat"><b id="size">–</b><span>tokenizer.json</span></div>
+    </div>
+    <div>
+      <p class="small" id="outlabel">Output</p>
+      <div class="outbox" id="out"></div>
+    </div>
+    <div>
+      <p class="small">The tape, as the tokenizer splits it. The orange token is the machine's head and the cell it reads.</p>
+      <div class="tape" id="tape" aria-live="off"></div>
+    </div>
+    <p class="why" id="why"></p>
+  </div>
+</div>
+
+<main class="wrap">
+  <section>
+    <h2>One tick</h2>
+    <p>The tape is a string. Exactly one character on it is the <b>head</b>: a marker that stands for a machine state and reads the character beside it. The tokenizer has one merge rule for every pair the head can form with a cell, and no other merges.</p>
+  </section>
+  <div class="steps">
+    <div><span class="n">1 · encode</span><h3>Find the head</h3><p>BPE can only merge the head with the cell it reads, so the tape splits into single characters plus one two-character token.</p></div>
+    <div><span class="n">2 · the id</span><h3>Look up the rule</h3><p>Each such pair has its own id. That id is the rule: which symbol to write, which way to move, which state comes next.</p></div>
+    <div><span class="n">3 · decode</span><h3>Print the result</h3><p>The same id is also an <i>added token</i> whose text is the rule's output. Decoding prints it where the pair was. Every other character decodes to itself.</p></div>
+    <div><span class="n">4 · repeat</span><h3>Stop when nothing changes</h3><p>A halting state has no merge rules, so its tape decodes to itself. The loop stops when the tape stops changing.</p></div>
+  </div>
+
+  <section>
+    <h2>The catch: every step would have to be reversible</h2>
+    <p>A token id decodes to exactly one string, and the library keeps one string per id when it saves a tokenizer. So if two rules wrote the same output, they would need two added tokens with the same text, which a tokenizer cannot hold. Taken plainly, the trick only runs machines whose every step can be undone: <a href="https://en.wikipedia.org/wiki/Reversible_computing">reversible computers</a>.</p>
+    <p>Ordinary programs throw information away all the time. So each output carries a short tag of private-use characters that makes it unique, and the decoder has one generic rule: delete those characters. That deletion is the only place the machine forgets anything. It is a single find-and-replace with an empty replacement, the same for every machine.</p>
+  </section>
+
+  <section>
+    <h2>One pass is not enough; the loop is the point</h2>
+    <p>A single encode is a weak computer. Cognetta and Okazaki showed that BPE tokenization is a <a href="https://arxiv.org/abs/2410.15696">finite-state transduction</a>: one pass can only look a bounded distance ahead. One tick here rewrites just the two characters around the head.</p>
+    <p>Repeating the tick is what makes it unbounded. With a tape that can grow, which the rules allow at either edge, repeated tokenizing can run any program a Turing machine can. The loop is three lines of Python, the same way the famous "CSS is Turing complete" demos need someone clicking.</p>
+  </section>
+
+  <section>
+    <h2>The ladder</h2>
+    <p><b>Rung 1, small machines.</b> A binary counter (7 rules) and the 4-state busy beaver (24 rules), which halts after exactly 107 ticks with 13 ones on the tape, its known record.</p>
+    <p><b>Rung 2, one program per tokenizer.</b> A compiler turns a Brainfuck program into a machine whose states are the program. Each instruction is one tick, and printing walks the byte to the output at the left of the tape. Hello World becomes 94,843 rules and prints in 1,024 ticks.</p>
+    <p><b>Rung 3, one tokenizer for every program.</b> A universal interpreter of 73,968 rules. The program is written on the tape. The head carries each instruction from <code>▼</code>, the instruction pointer, to <code>▲</code>, the data pointer, executes it there and walks back. Data cells are Braille characters, whose dots spell the byte. Loops can nest 64 deep; input (<code>,</code>) is not supported.</p>
+  </section>
+
+  <section>
+    <h2>Numbers</h2>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Tokenizer</th><th>Merge rules</th><th>File</th><th>Program</th><th>Ticks</th></tr></thead>
+      <tbody>
+        <tr><td>4-state busy beaver</td><td class="num">24</td><td class="num">4 KB</td><td>itself</td><td class="num">107</td></tr>
+        <tr><td>Hello World, compiled</td><td class="num">94,843</td><td class="num">14.3 MB</td><td>Hello World</td><td class="num">1,024</td></tr>
+        <tr><td rowspan="4">Universal Brainfuck</td><td class="num" rowspan="4">73,968</td><td class="num" rowspan="4">11.1 MB</td><td>Hello World</td><td class="num">151,159</td></tr>
+        <tr><td>Alphabet</td><td class="num">23,433</td></tr>
+        <tr><td>Grid (nested loops)</td><td class="num">15,428</td></tr>
+        <tr><td>Jumps (skipped and nested)</td><td class="num">21,313</td></tr>
+      </tbody>
+    </table></div>
+    <p class="small">Clock speed on the universal tokenizer running Hello World: about 9,600 ticks a second with the <code>tokenizers</code> library, 5,900 through <code>transformers</code>' AutoTokenizer, and 10,000 with transformers.js in Node, on one core of a cloud machine. Every tick of every run in the test suite is checked against the machine's own rules, and every output against a plain Brainfuck interpreter, in Python and in transformers.js.</p>
+  </section>
+
+  <section>
+    <h2>Run it yourself</h2>
+<pre>pip install tokenizers transformers
+python -m tokcpu build                                   # writes tokenizers/
+python -m tokcpu run tokenizers/brainfuck programs/hello.bf --auto
+python -m tokcpu run tokenizers/4-state-busy-beaver --show 1</pre>
+    <p>The tokenizer folders load with <code>AutoTokenizer.from_pretrained</code>, so they can go on the Hugging Face Hub like any other.</p>
+  </section>
+</main>
+<footer class="wrap">This page loads <code>tokenizer.json</code> files and runs them with transformers.js 3.7.6, the JavaScript port of Hugging Face Transformers. The labels on the head chip come from a small side file that names each state; the tokenizer itself does all the work.</footer>
+
+<script type="module">
+const $ = (id) => document.getElementById(id);
+const LEFT = "⊢", RIGHT = "⊣", OUT_END = "┃", PROG_END = "║", IP = "▼", DP = "▲";
+const PRESETS = {
+  "Hello World": "++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++.",
+  "Alphabet": ">++++++++[<++++++++>-]<+>>++++++[<++++>-]<++[<.+>-]++++++++++.",
+  "Grid (nested loops)": "+++>++++++[>+++++++<-]>>++++++++++<<<[>>>>++++[<<.>>-]<.<<<-]",
+  "Jumps (skipped and nested)": "[[-]>[+]<]++++[>++++[>++++[>+<-]<-]<-]>>>+.",
+};
+const MACHINES = [
+  { id: "brainfuck", label: "Brainfuck, universal", dir: "tok/brainfuck", program: true },
+  { id: "hello", label: "Hello World, compiled", dir: "tok/hello" },
+  { id: "beaver", label: "Busy beaver", dir: "tok/4-state-busy-beaver" },
+  { id: "counter", label: "Binary counter", dir: "tok/binary-counter" },
+];
+
+let PTT = null;               // transformers.js PreTrainedTokenizer
+const cache = new Map();      // machine id -> {tok, meta}
+let cur = null, tape = "", start = "", ticks = 0, running = false, halted = false, lastWhy = null;
+
+function outByte(c) {
+  const o = c.codePointAt(0);
+  if (o >= 32 && o < 127) return o;
+  if (o >= 0x2400 && o < 0x2420) return o - 0x2400;
+  if (o === 0x2421) return 127;
+  return o - 0x0100 + 128;
+}
+function readOutput(t) {
+  const a = t.indexOf(LEFT), b = t.indexOf(OUT_END);
+  if (a < 0 || b < 0) return null;
+  return Array.from(t.slice(a + 1, b)).map((c) => String.fromCharCode(outByte(c))).join("");
+}
+function cleanProgram(src) {
+  const p = Array.from(src).filter((c) => "+-<>[].,".includes(c)).join("");
+  if (p.includes(",")) throw new Error("Input (,) is not supported.");
+  let d = 0, deep = 0;
+  for (const c of p) { if (c === "[") deep = Math.max(deep, ++d); if (c === "]" && --d < 0) throw new Error("A ] has no matching [."); }
+  if (d) throw new Error("A [ has no matching ].");
+  if (deep > 64) throw new Error("Loops nest deeper than 64.");
+  return p;
+}
+
+async function loadMachine(m) {
+  if (cache.has(m.id)) return cache.get(m.id);
+  const meta = await (await fetch(`${m.dir}/meta.json`)).json();
+  const resp = await fetch(`${m.dir}/tokenizer.json`);
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  const buf = new Uint8Array(await resp.arrayBuffer());
+  // gzip bytes start 1f 8b; if the host already unpacked them, this is the JSON itself
+  const text = buf[0] === 0x1f && buf[1] === 0x8b
+    ? await new Response(new Blob([buf]).stream().pipeThrough(new DecompressionStream("gzip"))).text()
+    : new TextDecoder().decode(buf);
+  const tok = new PTT(JSON.parse(text), meta.config);
+  const byName = {};
+  for (const [c, [q, s]] of Object.entries(meta.markers)) byName[q + "|" + s] = c;
+  const entry = { tok, meta, byName };
+  cache.set(m.id, entry);
+  return entry;
+}
+
+function tick(tok, t) {
+  return tok.decode(tok.encode(t, { add_special_tokens: false }), { skip_special_tokens: false, clean_up_tokenization_spaces: false });
+}
+
+function headLabel(c) {
+  const mk = cur.meta.markers[c];
+  if (!mk) return null;
+  const [q, s] = mk;
+  return s === "R" ? `${q}▸` : `◂${q}`;
+}
+function classOf(c) {
+  const o = c.codePointAt(0);
+  if (cur.meta.markers[c]) return "halt";
+  if (c === LEFT || c === RIGHT || c === OUT_END || c === PROG_END) return "edge";
+  if (c === IP || c === DP) return "ptr";
+  if (o >= 0x2800 && o <= 0x28ff) return "cell";
+  return "";
+}
+
+function render() {
+  $("ticks").textContent = ticks.toLocaleString();
+  const toks = cur.tok.tokenize(tape);
+  const box = $("tape");
+  const frag = document.createDocumentFragment();
+  let inOut = false;
+  for (const t of toks) {
+    const s = document.createElement("span");
+    if (Array.from(t).length === 2) {
+      s.className = "c head";
+      const chars = Array.from(t);
+      const hi = chars.findIndex((c) => cur.meta.markers[c]);
+      const lab = document.createElement("i");
+      lab.textContent = headLabel(chars[hi]);
+      const cellc = document.createElement("span");
+      cellc.textContent = chars[1 - hi];
+      if (hi === 0) s.append(lab, cellc); else s.append(cellc, lab);
+      s.title = "the head and the cell it reads: one token";
+    } else {
+      const c = t;
+      if (c === LEFT) inOut = true;
+      if (c === OUT_END) inOut = false;
+      const k = classOf(c);
+      s.className = "c " + (k || (inOut && c !== LEFT ? "out" : ""));
+      if (k === "halt") { s.textContent = headLabel(c); s.title = "a halted head: no rule applies"; }
+      else s.textContent = c === " " ? "␣" : c;
+      if (k === "cell") s.title = `cell value ${c.codePointAt(0) - 0x2800}`;
+    }
+    frag.append(s);
+  }
+  box.replaceChildren(frag);
+  // output
+  const out = readOutput(tape);
+  if (out !== null) { $("outlabel").textContent = "Output"; $("out").textContent = out || (ticks ? " " : "nothing printed yet"); }
+  else if (cur.id === "counter") { $("outlabel").textContent = "The number on the tape";
+    const digits = Array.from(tape).filter((c) => c === "0" || c === "1").join(""); $("out").textContent = digits ? `${digits} = ${parseInt(digits, 2)}` : "0"; }
+  else { $("outlabel").textContent = "Ones on the tape"; $("out").textContent = String(Array.from(tape).filter((c) => c === "1").length); }
+  // what the last tick did
+  if (lastWhy) {
+    const [w, id, o] = lastWhy;
+    const show = (str) => Array.from(str).map((c) => headLabel(c) ? `[${headLabel(c)}]` : c).join("");
+    $("why").innerHTML = `last tick: token <b>${esc(show(w))}</b> → id <b>${id}</b> → decodes to <b>${esc(show(o))}</b>`;
+  } else $("why").textContent = halted ? "halted: no merge rule applies, so the tape decodes to itself" : "";
+}
+function esc(s) { return s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c])); }
+
+function explain(t) {
+  const toks = cur.tok.tokenize(t);
+  const w = toks.find((x) => Array.from(x).length === 2);
+  if (!w) return null;
+  const id = cur.tok.model.tokens_to_ids.get(w);
+  const o = cur.tok.decode([id], { skip_special_tokens: false });
+  return [w, id, o];
+}
+
+function status(msg, cls = "") { const s = $("status"); s.textContent = msg; s.className = "status " + cls; }
+
+function oneTick() {
+  const nxt = tick(cur.tok, tape);
+  if (nxt === tape) { halted = true; return false; }
+  tape = nxt; ticks++;
+  return true;
+}
+
+let rateT = 0, rateN = 0;
+function loop() {
+  if (!running) return;
+  const per = Number($("speed").value);
+  const t0 = performance.now();
+  let n = 0;
+  lastWhy = per && per <= 20 ? explain(tape) : null;
+  while (per ? n < per : performance.now() - t0 < 14) {
+    if (!oneTick()) break;
+    n++;
+  }
+  rateN += n;
+  const now = performance.now();
+  if (now - rateT > 500) { $("rate").textContent = Math.round(rateN * 1000 / (now - rateT)).toLocaleString(); rateT = now; rateN = 0; }
+  if (halted) { running = false; lastWhy = null; $("run").textContent = "Run"; status(`halted after ${ticks.toLocaleString()} ticks`, "ok"); }
+  render();
+  if (running) requestAnimationFrame(loop);
+}
+
+function reset() {
+  running = false; halted = false; ticks = 0; lastWhy = null;
+  $("run").textContent = "Run";
+  try {
+    if (cur.def.program) {
+      const p = cleanProgram($("program").value);
+      start = LEFT + OUT_END + IP + cur.byName["F|R"] + p + PROG_END + DP + "⠀" + RIGHT;
+    } else start = cur.meta.start;
+    tape = start;
+    status("ready", "");
+  } catch (e) { status(e.message, "err"); tape = ""; }
+  $("rules").textContent = cur.meta.rules.toLocaleString();
+  $("size").textContent = cur.meta.bytes > 1e6 ? `${(cur.meta.bytes / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(cur.meta.bytes / 1e3))} KB`;
+  if (tape) render();
+}
+
+async function choose(m) {
+  for (const b of $("machines").children) b.setAttribute("aria-pressed", b.dataset.id === m.id ? "true" : "false");
+  $("progbox").hidden = !m.program;
+  running = false;
+  status(`loading ${m.label}…`);
+  try {
+    const entry = await loadMachine(m);
+    cur = { ...entry, def: m, id: m.id };
+    reset();
+  } catch (e) { status(`could not load this tokenizer (${e.message})`, "err"); }
+}
+
+function setup() {
+  for (const m of MACHINES) {
+    const b = document.createElement("button");
+    b.textContent = m.label; b.dataset.id = m.id; b.setAttribute("aria-pressed", "false");
+    b.addEventListener("click", () => choose(m));
+    $("machines").append(b);
+  }
+  $("preset").innerHTML = Object.keys(PRESETS).map((k) => `<option>${k}</option>`).join("");
+  $("program").value = PRESETS["Hello World"];
+  $("preset").addEventListener("change", () => { $("program").value = PRESETS[$("preset").value]; if (cur) reset(); });
+  $("program").addEventListener("change", () => { if (cur) reset(); });
+  $("run").addEventListener("click", () => {
+    if (!cur || !tape) return;
+    if (halted) reset();
+    running = !running;
+    $("run").textContent = running ? "Pause" : "Run";
+    if (running) { status("running", ""); rateT = performance.now(); rateN = 0; requestAnimationFrame(loop); } else status("paused");
+  });
+  $("step").addEventListener("click", () => {
+    if (!cur || !tape) return;
+    running = false; $("run").textContent = "Run";
+    lastWhy = explain(tape);
+    if (!oneTick()) { lastWhy = null; status(`halted after ${ticks.toLocaleString()} ticks`, "ok"); }
+    render();
+  });
+  $("reset").addEventListener("click", () => cur && reset());
+}
+
+setup();
+$("progbox").hidden = false;
+try {
+  ({ PreTrainedTokenizer: PTT } = await import("https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.6/dist/transformers.min.js"));
+  if (!("DecompressionStream" in window)) throw new Error("this browser cannot unpack the tokenizer files");
+  await choose(MACHINES[0]);
+} catch (e) {
+  status(`transformers.js did not load, so the tokenizer can't run here (${e.message})`, "err");
+  for (const b of document.querySelectorAll("button")) b.disabled = true;
+}
+</script>
