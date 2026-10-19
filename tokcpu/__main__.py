@@ -2,6 +2,7 @@
 
     python -m tokcpu build                         build every tokenizer into tokenizers/
     python -m tokcpu run tokenizers/brainfuck programs/hello.bf
+    python -m tokcpu run tokenizers/brainfuck programs/reverse.bf --input stressed
     python -m tokcpu run tokenizers/4-state-busy-beaver --show 1
     python -m tokcpu run tokenizers/hello --auto   (through transformers' AutoTokenizer)
     python -m tokcpu hub USER/tokcpu [--push]      stage (and upload) the Hugging Face Hub repo
@@ -28,6 +29,8 @@ PAGE = ("brainfuck", "hello", "4-state-busy-beaver", "binary-counter")     # mac
 def build(out: Path, web: bool = True) -> None:
     jobs = [("binary-counter", *small.counter()), ("4-state-busy-beaver", *small.busy_beaver_4())]
     for prog in sorted((ROOT / "programs").glob("*.bf")):
+        if "," in prog.read_text():          # input needs the universal tokenizer
+            continue
         m, tape = bf.compile_program(prog.read_text())
         jobs.append((prog.stem, m, tape))
     m = bf.universal()
@@ -75,6 +78,7 @@ def main(argv=None) -> int:
     r = sub.add_parser("run")
     r.add_argument("tokenizer")
     r.add_argument("program", nargs="?", help="a .bf file, for the universal brainfuck tokenizer")
+    r.add_argument("--input", default="", help="what the program's , reads (as UTF-8)")
     r.add_argument("--auto", action="store_true", help="load with transformers' AutoTokenizer")
     r.add_argument("--show", type=int, default=0, help="print the tape every N ticks")
     r.add_argument("--max", type=int, default=10 ** 9)
@@ -98,7 +102,7 @@ def main(argv=None) -> int:
         if not Path(a.program).exists():
             ap.error(f"no such program: {a.program}")
         try:
-            tape = bf.universal_tape(bf.universal(), Path(a.program).read_text())
+            tape = bf.universal_tape(bf.universal(), Path(a.program).read_text(), a.input.encode())
         except ValueError as e:
             ap.error(f"{a.program}: {e}")
     elif (d / "start.txt").exists():

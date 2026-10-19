@@ -79,10 +79,11 @@ three lines of Python, the same way "CSS is Turing complete" demos need someone 
 | 2 | alphabet, compiled | 28,301 | 4.2 MB | alphabet | 556 |
 | 2 | grid, compiled | 25,474 | 3.8 MB | grid | 477 |
 | 2 | jumps, compiled | 24,173 | 3.6 MB | jumps | 531 |
-| 3 | universal Brainfuck | 15,179 | 2.3 MB | Hello World | 154,137 |
+| 3 | universal Brainfuck | 17,210 | 2.6 MB | Hello World | 154,137 |
 | 3 | | | | alphabet | 27,053 |
 | 3 | | | | grid (nested loops) | 17,474 |
 | 3 | | | | jumps (skipped and nested) | 21,415 |
+| 3 | | | | reverse, input `stressed` | 1,904 |
 
 - **Rung 1, small machines** (`tokcpu/small.py`). Any Turing machine given as a table. The 4-state busy
   beaver halts after exactly 107 ticks with 13 ones on the tape, its known record.
@@ -92,18 +93,23 @@ three lines of Python, the same way "CSS is Turing complete" demos need someone 
 - **Rung 3, one tokenizer for every program** (`universal` in `tokcpu/bf.py`). The program is written
   on the tape. The head carries each instruction from `▼` (the instruction pointer) to `▲` (the data
   pointer), executes it there, and walks back. Jumps scan for the matching bracket with the loop depth
-  held in the state, up to 64 levels.
+  held in the state, up to 64 levels. Input waits at the right end of the tape after `¦`, and `,` takes
+  its first character.
 
 Both rungs print a byte in two trips, one per nibble. The high nibble goes left and waits before `┃`
 as a circled hex digit (`⓪` to `ⓕ`); the head goes back, reads the cell again, and the low nibble
 joins it. Carrying the whole byte at once would take 256 carrying states, each with a rule for every
 symbol it walks over: that was 92% of the universal tokenizer's rules. Two trips take 32 states, which
-cut it from 73,968 rules (11.1 MB) to 15,179 (2.3 MB) for 2% more ticks.
+cut it from 73,968 rules (11.1 MB) to 15,179 (2.3 MB) for 2% more ticks. Input (`,`) reuses the same
+trips the other way: the cell becomes a hole `◌`, the high nibble of the input's first character comes
+back and waits in it, and a second trip takes the character and brings the low nibble. It costs 2,031
+rules.
 
 Brainfuck details: cells are bytes that wrap; the data tape grows to the right as needed; moving left
-of cell 0 stops the machine; input (`,`) is not supported. Data cells are Braille characters (U+2800 +
-value), so the dots spell the byte. Printed bytes appear as themselves when printable, as control
-pictures below 32 (`␊` is a newline), and as U+0100 + (byte − 128) above 127.
+of cell 0 stops the machine; `,` reads 0 once the input is used up, and needs the universal tokenizer.
+Data cells are Braille characters (U+2800 + value), so the dots spell the byte. Printed and input bytes
+appear as themselves when printable, as control pictures below 32 (`␊` is a newline), and as
+U+0100 + (byte − 128) above 127.
 
 ### Clock speed
 
@@ -139,6 +145,7 @@ pip install -r requirements.txt
 python -m tokcpu build                                    # writes every tokenizer into tokenizers/
 python -m tokcpu run tokenizers/brainfuck programs/hello.bf
 python -m tokcpu run tokenizers/brainfuck programs/grid.bf --auto      # through AutoTokenizer
+python -m tokcpu run tokenizers/brainfuck programs/reverse.bf --input stressed
 python -m tokcpu run tokenizers/4-state-busy-beaver --show 1           # print every tick
 python -m tokcpu run tokenizers/hello                     # the compiled one; start.txt holds its tape
 ```
@@ -160,7 +167,7 @@ tokcpu/small.py       rung 1: a binary counter, the 4-state busy beaver, any Tur
 tokcpu/bf.py          rungs 2 and 3: the Brainfuck compiler, the universal interpreter, a reference interpreter
 tokcpu/__main__.py    build, run, and stage the Hub repo
 tokcpu/hub_card.md    the Hub repo's model card
-programs/             hello, alphabet, grid, jumps
+programs/             hello, alphabet, grid, jumps, and reverse (reads input)
 tests/                the checks above, and the transformers.js runner
 web/                  the interactive page; `build` copies its tokenizers into web/tok/
 ```

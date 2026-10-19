@@ -14,6 +14,8 @@ from tokcpu.compile import save, tokenizer_spec
 
 ROOT = Path(__file__).resolve().parent.parent
 PROGRAMS = sorted((ROOT / "programs").glob("*.bf"))
+COMPILED = [p for p in PROGRAMS if "," not in p.read_text()]     # rung 2 has no input
+INPUT = b"stressed"
 
 
 def tok_of(m):
@@ -71,7 +73,7 @@ def test_autotokenizer(tmp_path):
     assert n == 107
 
 
-@pytest.mark.parametrize("prog", PROGRAMS, ids=lambda p: p.stem)
+@pytest.mark.parametrize("prog", COMPILED, ids=lambda p: p.stem)
 def test_compiled_program(prog):
     src = prog.read_text()
     m, tape = bf.compile_program(src)
@@ -89,8 +91,22 @@ def universal():
 def test_universal(universal, prog):
     m, tok = universal
     src = prog.read_text()
-    end, n = run_checked(m, tok, bf.universal_tape(m, src))
-    assert bf.read_output(end) == bf.interpret(src)[0]
+    end, n = run_checked(m, tok, bf.universal_tape(m, src, INPUT))     # every program gets input
+    assert bf.read_output(end) == bf.interpret(src, INPUT)[0]
+
+
+@pytest.mark.parametrize("src, data", [
+    (",[.,]", b"cat me"),                      # cat: the end of the input reads 0 and stops it
+    (",.,.,.", b"a"),                          # reading past the end keeps giving 0
+    (",.", b""),                               # no input at all
+    (">>>,.", b"z"),                           # new cells grow in front of the input
+    (",+.,-.", bytes([255, 0])),               # every byte value survives the two trips
+    (",[.,]", bytes(range(256))),
+])
+def test_universal_input(universal, src, data):
+    m, tok = universal
+    end, n = run_checked(m, tok, bf.universal_tape(m, src, data))
+    assert bf.read_output(end) == bf.interpret(src, data)[0]
 
 
 def test_errors_halt(universal):
@@ -98,7 +114,7 @@ def test_errors_halt(universal):
     end, n = run_checked(m, tok, bf.universal_tape(m, "+.<+."))     # moves left of cell 0: stops there
     assert bf.read_output(end) == b"\x01"
     with pytest.raises(ValueError):
-        bf.universal_tape(m, ",")
+        bf.compile_program(",")
     with pytest.raises(ValueError):
         bf.compile_program("[")
 

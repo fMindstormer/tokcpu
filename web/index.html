@@ -1,3 +1,4 @@
+<meta charset="utf-8">
 <title>Tokenizer CPU</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -65,13 +66,15 @@ p { margin: 0; }
 button.act { font: 600 0.9rem var(--text); border: 1px solid var(--ink); background: var(--ink); color: var(--paper);
   border-radius: 999px; padding: 0.45rem 1.1rem; cursor: pointer; }
 button.act.ghost { background: transparent; color: var(--ink); }
-button:focus-visible, select:focus-visible, textarea:focus-visible { outline: 3px solid var(--head); outline-offset: 2px; }
+button:focus-visible, select:focus-visible, textarea:focus-visible, input:focus-visible { outline: 3px solid var(--head); outline-offset: 2px; }
 button:disabled { opacity: 0.45; cursor: default; }
 select { font: 0.85rem var(--text); color: var(--ink); background: var(--sheet); border: 1px solid var(--line); border-radius: 8px; padding: 0.35rem 0.5rem; }
 label.small, .small { font-size: 0.82rem; color: var(--muted); }
 .prog { display: grid; gap: 0.4rem; }
 textarea { width: 100%; min-height: 4.6rem; font: 0.8rem/1.5 var(--mono); color: var(--ink); background: var(--code-bg);
   border: 1px solid var(--line); border-radius: 8px; padding: 0.6rem; resize: vertical; word-break: break-all; }
+input[type="text"] { flex: 1; min-width: 0; font: 0.8rem var(--mono); color: var(--ink); background: var(--code-bg);
+  border: 1px solid var(--line); border-radius: 8px; padding: 0.4rem 0.6rem; }
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); gap: 0.8rem; }
 .stat b { display: block; font: 700 1.5rem/1.1 var(--display); font-variant-numeric: tabular-nums; }
 .stat span { font-size: 0.8rem; color: var(--muted); }
@@ -131,9 +134,13 @@ while (nxt := <b>tok.decode(tok.encode(tape))</b>) != tape:
       <div class="row">
         <label class="small" for="preset">Program</label>
         <select id="preset"></select>
-        <span class="small">or type your own: <code>+ - &lt; &gt; [ ] .</code></span>
+        <span class="small">or type your own: <code>+ - &lt; &gt; [ ] . ,</code></span>
       </div>
       <textarea id="program" spellcheck="false" aria-label="Brainfuck program"></textarea>
+      <div class="row">
+        <label class="small" for="input">Input for <code>,</code></label>
+        <input type="text" id="input" spellcheck="false" autocomplete="off">
+      </div>
     </div>
     <div class="row">
       <button class="act" id="run">Run</button>
@@ -194,7 +201,7 @@ while (nxt := <b>tok.decode(tok.encode(tape))</b>) != tape:
     <h2>The ladder</h2>
     <p><b>Rung 1, small machines.</b> A binary counter (7 rules) and the 4-state busy beaver (24 rules), which halts after exactly 107 ticks with 13 ones on the tape, its known record.</p>
     <p><b>Rung 2, one program per tokenizer.</b> A compiler turns a Brainfuck program into a machine whose states are the program. Each instruction is one tick, and printing walks the byte to the output at the left of the tape, one nibble at a time. Hello World becomes 38,265 rules and prints in 1,194 ticks.</p>
-    <p><b>Rung 3, one tokenizer for every program.</b> A universal interpreter of 15,179 rules. The program is written on the tape. The head carries each instruction from <code>▼</code>, the instruction pointer, to <code>▲</code>, the data pointer, executes it there and walks back. Data cells are Braille characters, whose dots spell the byte. Loops can nest 64 deep; input (<code>,</code>) is not supported.</p>
+    <p><b>Rung 3, one tokenizer for every program.</b> A universal interpreter of 17,210 rules. The program is written on the tape. The head carries each instruction from <code>▼</code>, the instruction pointer, to <code>▲</code>, the data pointer, executes it there and walks back. Data cells are Braille characters, whose dots spell the byte. Loops can nest 64 deep. Input waits at the right end of the tape after <code>¦</code>, and <code>,</code> takes its first character.</p>
   </section>
 
   <section>
@@ -204,10 +211,11 @@ while (nxt := <b>tok.decode(tok.encode(tape))</b>) != tape:
       <tbody>
         <tr><td>4-state busy beaver</td><td class="num">24</td><td class="num">4 KB</td><td>itself</td><td class="num">107</td></tr>
         <tr><td>Hello World, compiled</td><td class="num">38,265</td><td class="num">5.7 MB</td><td>Hello World</td><td class="num">1,194</td></tr>
-        <tr><td rowspan="4">Universal Brainfuck</td><td class="num" rowspan="4">15,179</td><td class="num" rowspan="4">2.3 MB</td><td>Hello World</td><td class="num">154,137</td></tr>
+        <tr><td rowspan="5">Universal Brainfuck</td><td class="num" rowspan="5">17,210</td><td class="num" rowspan="5">2.6 MB</td><td>Hello World</td><td class="num">154,137</td></tr>
         <tr><td>Alphabet</td><td class="num">27,053</td></tr>
         <tr><td>Grid (nested loops)</td><td class="num">17,474</td></tr>
         <tr><td>Jumps (skipped and nested)</td><td class="num">21,415</td></tr>
+        <tr><td>Reverse, input <code>stressed</code></td><td class="num">1,904</td></tr>
       </tbody>
     </table></div>
     <p class="small">Clock speed on the universal tokenizer running Hello World: about 9,600 ticks a second with the <code>tokenizers</code> library, 5,900 through <code>transformers</code>' AutoTokenizer, and 10,000 with transformers.js in Node, on one core of a cloud machine. Every tick of every run in the test suite is checked against the machine's own rules, and every output against a plain Brainfuck interpreter, in Python and in transformers.js.</p>
@@ -228,12 +236,15 @@ python -m tokcpu run tokenizers/4-state-busy-beaver --show 1</pre>
 const $ = (id) => document.getElementById(id);
 const LEFT = "⊢", RIGHT = "⊣", OUT_END = "┃", PROG_END = "║", IP = "▼", DP = "▲";
 const HALF = "⓪①②③④⑤⑥⑦⑧⑨ⓐⓑⓒⓓⓔⓕ";   // a printed byte's high nibble, waiting for its low one
+const IN = "¦", HOLE = "◌";              // ¦ before the input; ◌ a cell waiting for an input byte
 const PRESETS = {
   "Hello World": "++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++.",
   "Alphabet": ">++++++++[<++++++++>-]<+>>++++++[<++++>-]<++[<.+>-]++++++++++.",
   "Grid (nested loops)": "+++>++++++[>+++++++<-]>>++++++++++<<<[>>>>++++[<<.>>-]<.<<<-]",
   "Jumps (skipped and nested)": "[[-]>[+]<]++++[>++++[>++++[>+<-]<-]<-]>>>+.",
+  "Reverse (reads input)": ">,[>,]<[.<]",
 };
+const PRESET_INPUT = { "Reverse (reads input)": "stressed" };
 const MACHINES = [
   { id: "brainfuck", label: "Brainfuck, universal", dir: "tok/brainfuck", program: true },
   { id: "hello", label: "Hello World, compiled", dir: "tok/hello" },
@@ -245,6 +256,12 @@ let PTT = null;               // transformers.js PreTrainedTokenizer
 const cache = new Map();      // machine id -> {tok, meta}
 let cur = null, tape = "", start = "", ticks = 0, running = false, halted = false, lastWhy = null;
 
+function outChar(v) {
+  if (v >= 32 && v < 127) return String.fromCharCode(v);
+  if (v < 32) return String.fromCharCode(0x2400 + v);
+  if (v === 127) return "␡";
+  return String.fromCharCode(0x0100 + v - 128);
+}
 function outByte(c) {
   const o = c.codePointAt(0);
   if (o >= 32 && o < 127) return o;
@@ -259,7 +276,6 @@ function readOutput(t) {
 }
 function cleanProgram(src) {
   const p = Array.from(src).filter((c) => "+-<>[].,".includes(c)).join("");
-  if (p.includes(",")) throw new Error("Input (,) is not supported.");
   let d = 0, deep = 0;
   for (const c of p) { if (c === "[") deep = Math.max(deep, ++d); if (c === "]" && --d < 0) throw new Error("A ] has no matching [."); }
   if (d) throw new Error("A [ has no matching ].");
@@ -298,8 +314,8 @@ function headLabel(c) {
 function classOf(c) {
   const o = c.codePointAt(0);
   if (cur.meta.markers[c]) return "halt";
-  if (c === LEFT || c === RIGHT || c === OUT_END || c === PROG_END) return "edge";
-  if (c === IP || c === DP) return "ptr";
+  if (c === LEFT || c === RIGHT || c === OUT_END || c === PROG_END || c === IN) return "edge";
+  if (c === IP || c === DP || c === HOLE) return "ptr";
   if (o >= 0x2800 && o <= 0x28ff) return "cell";
   return "";
 }
@@ -393,7 +409,8 @@ function reset() {
   try {
     if (cur.def.program) {
       const p = cleanProgram($("program").value);
-      start = LEFT + OUT_END + IP + cur.byName["F|R"] + p + PROG_END + DP + "⠀" + RIGHT;
+      const data = Array.from(new TextEncoder().encode($("input").value), outChar).join("");
+      start = LEFT + OUT_END + IP + cur.byName["F|R"] + p + PROG_END + DP + "⠀" + (data ? IN + data : "") + RIGHT;
     } else start = cur.meta.start;
     tape = start;
     status("ready", "");
@@ -424,8 +441,13 @@ function setup() {
   }
   $("preset").innerHTML = Object.keys(PRESETS).map((k) => `<option>${k}</option>`).join("");
   $("program").value = PRESETS["Hello World"];
-  $("preset").addEventListener("change", () => { $("program").value = PRESETS[$("preset").value]; if (cur) reset(); });
+  $("preset").addEventListener("change", () => {
+    $("program").value = PRESETS[$("preset").value];
+    $("input").value = PRESET_INPUT[$("preset").value] ?? "";
+    if (cur) reset();
+  });
   $("program").addEventListener("change", () => { if (cur) reset(); });
+  $("input").addEventListener("change", () => { if (cur) reset(); });
   $("run").addEventListener("click", () => {
     if (!cur || !tape) return;
     if (halted) reset();

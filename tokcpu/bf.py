@@ -12,9 +12,10 @@ walks over; two trips need 32.
 
 Rung 3, `universal`: one tokenizer for every program. The program is written on the tape and the head
 shuttles between the instruction pointer (▼, before the current instruction) and the data pointer
-(▲, before the current cell).
+(▲, before the current cell). Input, if any, waits at the right end after ¦; `,` takes its first
+character, and reads 0 once it is used up.
 
-    tape:  ⊢ OUTPUT ┃ PROGRAM ║ DATA ⊣
+    tape:  ⊢ OUTPUT ┃ PROGRAM ║ DATA ¦ INPUT ⊣
 
 Data cells are Braille characters: U+2800 + value, so the dots show the byte's bits. Output bytes are
 written as themselves when printable ASCII, as control pictures (␊ for newline) below 32, ␡ for 127,
@@ -29,6 +30,7 @@ OPS = "+-<>[].,"
 OUT_END, PROG_END = "┃", "║"       # ┃ after the output, ║ after the program
 IP, DP = "▼", "▲"                  # ▼ instruction pointer, ▲ data pointer (rung 3)
 HALF = "⓪①②③④⑤⑥⑦⑧⑨ⓐⓑⓒⓓⓔⓕ"          # a printed byte's high nibble, waiting for its low one
+IN, HOLE = "¦", "◌"                # ¦ before the input; ◌ a cell waiting for an input byte (rung 3)
 
 
 def cell(v: int) -> str:
@@ -84,8 +86,9 @@ def brackets(program: str) -> dict[int, int]:
     return pair
 
 
-def interpret(program: str, max_steps: int = 10 ** 8) -> tuple[bytes, int]:
-    """The reference: a plain Brainfuck interpreter. Returns (output, instructions executed)."""
+def interpret(program: str, data: bytes = b"", max_steps: int = 10 ** 8) -> tuple[bytes, int]:
+    """The reference: a plain Brainfuck interpreter; `,` reads 0 at the end of the input.
+    Returns (output, instructions executed)."""
     p = clean(program)
     pair, mem, dp, ip, out, n = brackets(p), [0], 0, 0, bytearray(), 0
     while ip < len(p) and n < max_steps:
@@ -105,7 +108,8 @@ def interpret(program: str, max_steps: int = 10 ** 8) -> tuple[bytes, int]:
         elif c == ".":
             out.append(mem[dp])
         elif c == ",":
-            raise ValueError("input (,) is not supported")
+            mem[dp] = data[0] if data else 0
+            data = data[1:]
         elif c == "[" and mem[dp] == 0:
             ip = pair[ip]
         elif c == "]" and mem[dp] != 0:
@@ -122,7 +126,7 @@ def interpret(program: str, max_steps: int = 10 ** 8) -> tuple[bytes, int]:
 def compile_program(program: str) -> tuple[Machine, str]:
     p = clean(program)
     if "," in p:
-        raise ValueError("input (,) is not supported")
+        raise ValueError("input (,) needs the universal tokenizer")
     pair = brackets(p)
     n = len(p)
     m = Machine(f"brainfuck program ({n} instructions)", blank=cell(0))
@@ -219,7 +223,7 @@ def compile_program(program: str) -> tuple[Machine, str]:
 # Rung 3: one universal interpreter; the program is on the tape
 # ---------------------------------------------------------------------------------------------
 
-UOPS = "+-<>[]."            # input (,) is not supported
+UOPS = OPS
 DEPTH = 64                   # deepest loop nesting the interpreter can match
 
 
@@ -228,10 +232,12 @@ def universal() -> Machine:
     moves ▲, or starts a print or a jump. Return: BK walks back to ▼ and ADV moves ▼ one instruction on.
     Jumps scan with the loop depth held in the state (D going right, U going left). A print carries the
     high nibble (H) left to the output, RE walks back to ▲, LO reads the cell again, the low nibble (Lo)
-    goes left and J joins the two; then FD walks back to ▼."""
+    goes left and J joins the two; then FD walks back to ▼. Input: `,` leaves a hole (◌) where ▲ and the
+    cell were, GI walks right to the input and RH reads its first character, H carries the high nibble
+    back into the hole, GJ goes again, RL takes the character, and Lo carries the low nibble back."""
     m = Machine("universal brainfuck interpreter", blank=cell(0))
     cells = [cell(v) for v in range(256)]
-    m.symbol(OUT_END, PROG_END, IP, DP, *cells, *(out_char(v) for v in range(256)), *UOPS, *HALF)
+    m.symbol(OUT_END, PROG_END, IP, DP, IN, HOLE, *cells, *(out_char(v) for v in range(256)), *UOPS, *HALF)
     R, L = m.R, m.L
     m.state("F")
     for X in UOPS:                                       # fetch
@@ -249,9 +255,11 @@ def universal() -> Machine:
         m.rule(R("E.") + a, L(f"H{v >> 4}") + DP + a)
         m.rule(R("E[") + a, (L("BKJ") if v == 0 else L("BK")) + DP + a)
         m.rule(R("E]") + a, (L("BKB") if v != 0 else L("BK")) + DP + a)
+        m.rule(R("E,") + a, HOLE + R("GI"))
         m.rule(R("N") + a, L("BK") + DP + a)             # > : mark the next cell...
         m.rule(a + L("P"), L("BK") + DP + a)             # < : ...or the previous one
     m.rule(R("N") + RIGHT, L("BK") + DP + cells[0] + RIGHT)   # > past the end: a new zero cell
+    m.rule(R("N") + IN, L("BK") + DP + cells[0] + IN)
     for back in ("BK", "BKJ", "BKB"):                    # walk back to ▼
         for c in list(UOPS) + [PROG_END] + cells:
             m.rule(c + L(back), L(back) + c)
@@ -300,18 +308,33 @@ def universal() -> Machine:
         for h in range(16):
             m.rule(HALF[h] + J, out_char(16 * h + lo) + R("FD"))
     m.rule(R("FD") + OUT_END, OUT_END + R("FD"))
+    for go, read, back in (("GI", "RH", "H"), ("GJ", "RL", "Lo")):   # input: two trips, as for print
+        for c in cells:
+            m.rule(R(go) + c, c + R(go))
+        m.rule(R(go) + IN, IN + R(read))
+        m.rule(R(go) + RIGHT, L(f"{back}0") + RIGHT)                 # no input at all: read 0
+        m.rule(R(read) + RIGHT, L(f"{back}0") + RIGHT)               # input used up: read 0
+    for v in range(256):
+        x = out_char(v)
+        m.rule(R("RH") + x, L(f"H{v >> 4}") + x)                     # read the high nibble...
+        m.rule(R("RL") + x, L(f"Lo{v & 15}"))                        # ...then take the character
+    for h in range(16):
+        m.rule(IN + L(f"H{h}"), L(f"H{h}") + IN)
+        m.rule(HOLE + L(f"H{h}"), HALF[h] + R("GJ"))                  # the high nibble waits in the hole
+        m.rule(IN + L(f"Lo{h}"), L(f"Lo{h}") + IN)
+        for lo in range(16):
+            m.rule(HALF[h] + L(f"Lo{lo}"), L("BK") + DP + cells[16 * h + lo])
     for X in UOPS:                                       # and walk back to ▼
         m.rule(R("FD") + X, X + R("FD"))
     m.rule(R("FD") + IP, R("ADV"))
     return m
 
 
-def universal_tape(m: Machine, program: str) -> str:
+def universal_tape(m: Machine, program: str, data: bytes = b"") -> str:
     p = clean(program)
-    if "," in p:
-        raise ValueError("input (,) is not supported")
     brackets(p)
     depth = max((p[:i + 1].count("[") - p[:i + 1].count("]") for i in range(len(p))), default=0)
     if depth > DEPTH:
         raise ValueError(f"loops nest {depth} deep; the interpreter matches up to {DEPTH}")
-    return LEFT + OUT_END + IP + m.R("F") + p + PROG_END + DP + cell(0) + RIGHT
+    inp = IN + "".join(out_char(b) for b in data) if data else ""
+    return LEFT + OUT_END + IP + m.R("F") + p + PROG_END + DP + cell(0) + inp + RIGHT

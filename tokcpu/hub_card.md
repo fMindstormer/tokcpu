@@ -31,8 +31,8 @@ print(tape)
  └── output ──┘ └──────────────────────────────── the program ───────────────────────────────────────┘  └─ memory ─┘
 ```
 
-To run your own program, start from `"⊢┃▼가" + program + "║▲⠀⊣"`. Input (`,`) is not supported, and
-loops can nest up to 64 deep.
+To run your own program, start from `"⊢┃▼가" + program + "║▲⠀¦" + input + "⊣"`. `,` reads the input's
+first character, and 0 once it is used up. Loops can nest up to 64 deep.
 
 ## How it works
 
@@ -48,7 +48,7 @@ The full explanation, the compiler and the tests are on GitHub: https://github.c
 
 | Folder | Machine | Merge rules |
 |---|---|---:|
-| (root) | universal Brainfuck interpreter: runs any program written on the tape | 15,179 |
+| (root) | universal Brainfuck interpreter: runs any program written on the tape | 17,210 |
 | `hello`, `alphabet`, `grid`, `jumps` | one Brainfuck program compiled into each tokenizer | 24,173 – 38,265 |
 | `4-state-busy-beaver` | the 4-state busy beaver: halts after 107 ticks with 13 ones | 24 |
 | `binary-counter` | counts in binary forever | 7 |
