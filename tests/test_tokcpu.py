@@ -180,6 +180,20 @@ def test_page_compiler_matches(tmp_path):
         assert out[1] == tape
 
 
+def test_fuzz_variants_agree_in_rust():
+    """The fuzzer's oracle and its equivalent file variants agree with the Rust library, so a runtime
+    that disagrees with them is the one that is wrong."""
+    from tokcpu import fuzz
+    rng = random.Random(2)
+    for _ in range(40):
+        m, start = fuzz.random_machine(rng)
+        tapes = fuzz.trace(m, start, 200)
+        for name, spec in fuzz.variants(m, rng).items():
+            tok = Tokenizer.from_str(json.dumps(spec, ensure_ascii=False))
+            for a, b in zip(tapes, tapes[1:]):
+                assert tok.decode(tok.encode(a).ids, skip_special_tokens=False) == b, name
+
+
 def test_transformers_js(tmp_path):
     """The same tokenizer in transformers.js gives the same ticks (needs node and
     `npm install @huggingface/transformers` in tests/)."""

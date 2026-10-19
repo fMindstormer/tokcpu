@@ -156,6 +156,29 @@ sorting 1,000 letters does about 320,000 block rewrites a second, where one head
 rules a second on the same machine. Block cellular automata can be universal too, but this one only
 sorts.
 
+## Fuzzing tokenizer runtimes
+
+The same `tokenizer.json` is re-implemented in many runtimes, and they can quietly disagree. Most
+cross-checks compare two implementations on sample text, so they can tell that two disagree but not
+which one is wrong. Here the machine is an independent oracle: `Machine.step` says what every tick
+must give without asking any tokenizer library.
+
+`python -m tokcpu fuzz` (`tokcpu/fuzz.py`) compiles random machines over awkward alphabets (spaces and
+controls, quotes and backslashes, combining marks, characters outside the Basic Multilingual Plane),
+writes each one in several variants the format says are equivalent (merges as `"a b"` strings, added
+tokens marked special or normalized, shuffled ids, no Fuse decoder), and runs every variant in every
+runtime it finds: `tokenizers`, `transformers`, and, after `cd fuzz && npm install`, transformers.js 3
+and 4 and `@huggingface/tokenizers`. A disagreement is checked again in a fresh process, shrunk to a
+one-tick tape, and kept with its tokenizer in `build/fuzz/`.
+
+The first campaign (200 machines, 233,555 ticks per runtime) found one bug, in all three JavaScript
+runtimes at once: after some other tokenizer.json has been parsed in the same process, a vocab key
+such as `"` can come back as `\`, so the token silently disappears. The cause is below them, in V8's
+`JSON.parse`, which can misread an escaped key that follows a cached one. Node 22 is fine; Node 24
+and 25 and Chrome 139 are affected. It is a known V8 bug ([nodejs/node#63785](https://github.com/nodejs/node/issues/63785)),
+fixed in V8 and awaiting a Node 24 backport ([nodejs/node#66542](https://github.com/nodejs/node/pull/66542)).
+Six popular Hub tokenizers loaded one after another in Node 24 came through intact.
+
 ## Checking it
 
 `python -m pytest tests` (about a minute; CI runs it on every push):
@@ -202,6 +225,8 @@ tokcpu/compile.py     machine -> tokenizer.json (BPE merges, added tokens, the t
 tokcpu/small.py       rung 1: a binary counter, the 4-state busy beaver, any Turing machine table
 tokcpu/bf.py          rungs 2 and 3: the Brainfuck compiler, the universal interpreter, a reference interpreter
 tokcpu/blocks.py      parallel ticks: a block cellular automaton, and the sorter
+tokcpu/fuzz.py        differential fuzzing of tokenizer runtimes, with the machine as oracle
+fuzz/                 the JavaScript runtimes for the fuzzer (runtimes.mjs) and their pinned versions
 tokcpu/__main__.py    build, run, and stage the Hub repo
 tokcpu/hub_card.md    the Hub repo's model card
 programs/             hello, alphabet, grid, jumps, and reverse (reads input)

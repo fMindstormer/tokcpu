@@ -6,6 +6,7 @@
     python -m tokcpu run tokenizers/4-state-busy-beaver --show 1
     python -m tokcpu run tokenizers/hello --auto   (through transformers' AutoTokenizer)
     python -m tokcpu hub USER/tokcpu [--push]      stage (and upload) the Hugging Face Hub repo
+    python -m tokcpu fuzz --cases 200              differential fuzzing of tokenizer runtimes
 
 A run ticks `decode(encode(tape))` until the tape stops changing, or until it repeats every two ticks
 (a block automaton that has settled, see blocks.py). Nothing else touches the tape.
@@ -90,6 +91,11 @@ def main(argv=None) -> int:
     h.add_argument("repo", help="the Hub repo id, e.g. your-name/tokcpu")
     h.add_argument("--out", default=str(ROOT / "build" / "hub"))
     h.add_argument("--push", action="store_true", help="upload it (needs `hf auth login`)")
+    f = sub.add_parser("fuzz", help="differential fuzzing of tokenizer runtimes, with the machine as oracle")
+    f.add_argument("--cases", type=int, default=100, help="random machines to try")
+    f.add_argument("--seed", type=int, default=0)
+    f.add_argument("--limit", type=int, default=300, help="most ticks per machine")
+    f.add_argument("--out", default=str(ROOT / "build" / "fuzz"))
     a = ap.parse_args(argv)
 
     if a.cmd == "build":
@@ -98,6 +104,15 @@ def main(argv=None) -> int:
     if a.cmd == "hub":
         hub(a.repo, Path(a.out), a.push)
         return 0
+    if a.cmd == "fuzz":
+        from .fuzz import fuzz
+        found = fuzz(a.cases, a.seed, Path(a.out), a.limit)
+        print(f"\n{len(found)} distinct disagreements" + (f", kept in {a.out}" if found else ""))
+        for f in found:
+            what = f.error or f"expected {f.want!r}, got {f.got!r}"
+            when = "" if f.fresh in (None, True) else ", only after earlier tokenizers in the same process"
+            print(f"- {f.runtime} x{f.seen}{when}: tape {f.tape!r}: {what[:200]}")
+        return 1 if found else 0
 
     d = Path(a.tokenizer)
     if not (d / "tokenizer.json").exists():
