@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from tokenizers import Tokenizer
 
-from tokcpu import bf, small
+from tokcpu import bf, blocks, small
 from tokcpu.compile import save, tokenizer_spec
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -38,6 +38,45 @@ def test_busy_beaver_halts_with_its_record():
     m, tape = small.busy_beaver_4()
     end, n = run_checked(m, tok_of(m), tape)
     assert n == 107 and end.count("1") == 13
+
+
+def test_two_heads_tick_together():
+    """Heads that never meet each get their rule applied in the same tick."""
+    m, _ = small.busy_beaver_4()
+    tok = tok_of(m)
+    half = "0" * 30 + m.R("A") + "0" * 30
+    tape, n = "⊢" + half + half + "⊣", 0
+    while (nxt := tok.decode(tok.encode(tape).ids)) != tape:
+        heads = [i for i, c in enumerate(tape) if c in m.marker_of]
+        want = tape
+        for i in reversed(heads):                    # every head steps at once
+            at = i if m.marker_of[tape[i]][1] == "R" else i - 1
+            want = want[:at] + m.rules.get(tape[at:at + 2], tape[at:at + 2]) + want[at + 2:]
+        assert nxt == want, n
+        tape, n = nxt, n + 1
+    assert n == 107 and tape.count("1") == 26
+
+
+def run_blocks(tok, rules, tape):
+    """Tick until the tape repeats every two ticks; returns (tape, ticks)."""
+    n = 0
+    while True:
+        a = tok.decode(tok.encode(tape).ids)
+        assert a == blocks.step(rules, tape), n
+        b = tok.decode(tok.encode(a).ids)
+        assert b == blocks.step(rules, a), n
+        if b == tape:
+            return tape, n
+        tape, n = b, n + 2
+
+
+def test_block_sort():
+    spec, rules, start = blocks.sorter()
+    tok = Tokenizer.from_str(json.dumps(spec, ensure_ascii=False))
+    for s in ["", "a", "ba", blocks.LETTERS[::-1], blocks.cells(start)] + [
+            "".join(sorted(blocks.LETTERS * 2, key=lambda c, k=k: hash((c, k)))) for k in range(5)]:
+        end, n = run_blocks(tok, rules, blocks.tape(s))
+        assert blocks.cells(end) == "".join(sorted(s)) and n <= len(s) + 1, (s, n)
 
 
 def test_counter_counts():

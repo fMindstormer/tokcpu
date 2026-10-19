@@ -52,6 +52,8 @@ The full explanation, the compiler and the tests are on GitHub: https://github.c
 | `hello`, `alphabet`, `grid`, `jumps` | one Brainfuck program compiled into each tokenizer | 24,173 – 38,265 |
 | `4-state-busy-beaver` | the 4-state busy beaver: halts after 107 ticks with 13 ones | 24 |
 | `binary-counter` | counts in binary forever | 7 |
+| `sort` | a block cellular automaton: every two-letter block of the tape is rewritten in one tick, sorting it | 704 |
 
 Load a subfolder with `AutoTokenizer.from_pretrained("{repo}", subfolder="hello")`. Each one has its
-own `start.txt`. `programs/` holds the Brainfuck sources.
+own `start.txt`. `programs/` holds the Brainfuck sources. The sorter's tape never stops changing (a phase
+mark flips every tick), so stop it when the tape repeats every two ticks.

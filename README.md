@@ -124,6 +124,33 @@ The universal tokenizer running Hello World, on one core of a cloud machine:
 
 Speed does not depend on the number of rules; it falls slowly as the tape gets longer.
 
+## Parallel ticks
+
+One encode reads the whole tape, but a single head uses two characters of it. Two ways to use the rest:
+
+**Several heads.** Heads that never meet each get their rule applied in the same tick, with no change to
+the compiler. Two busy beavers on one tape finish together in 107 ticks.
+
+**A block cellular automaton** (`tokcpu/blocks.py`). A stock `Split` pre-tokenizer cuts the tape into
+two-character blocks before BPE runs, and every block is a merge, so one tick rewrites every block at
+once. A phase mark `◦` after the left edge shifts the blocks by one character, and the edge block adds
+or drops it, so the blocks alternate between two alignments (the Margolus neighbourhood) and
+information can cross block boundaries.
+
+The demo, `tokenizers/sort`, is odd-even transposition sort: each block puts its two letters in order,
+and n letters are sorted after at most n ticks. It has 704 rules.
+
+```
+⊢◦thequickbrownfoxjumpsoverthelazydog⊣     tick 0
+⊢◦abcdeeefghhijklmnoooopqrrsttuuvwxyz⊣     tick 30
+```
+
+The mark flips every tick, so the tape never stops changing; a run stops when the tape repeats every
+two ticks. A tick costs time in proportion to the tape's length either way, so this buys throughput:
+sorting 1,000 letters does about 320,000 block rewrites a second, where one head does about 10,000
+rules a second on the same machine. Block cellular automata can be universal too, but this one only
+sorts.
+
 ## Checking it
 
 `python -m pytest tests` (about a minute; CI runs it on every push):
@@ -133,7 +160,8 @@ Speed does not depend on the number of rules; it falls slowly as the tape gets l
   program on both rung 2 and rung 3;
 - the files survive the library's own save and reload, and run through `transformers`' AutoTokenizer;
 - with transformers.js installed (`cd tests && npm install`), the compiled Hello World runs tick for
-  tick the same in JavaScript.
+  tick the same in JavaScript;
+- the sorter and two heads on one tape are checked tick for tick against a direct reference step.
 
 Tested with `tokenizers` 0.22 and 0.23, `transformers` 4.57 and 5.20, and transformers.js 3.7.6, on
 Python 3.13. CI also runs Python 3.10.
@@ -148,11 +176,12 @@ python -m tokcpu run tokenizers/brainfuck programs/grid.bf --auto      # through
 python -m tokcpu run tokenizers/brainfuck programs/reverse.bf --input stressed
 python -m tokcpu run tokenizers/4-state-busy-beaver --show 1           # print every tick
 python -m tokcpu run tokenizers/hello                     # the compiled one; start.txt holds its tape
+python -m tokcpu run tokenizers/sort --show 2             # the block automaton, sorting a pangram
 ```
 
 Each folder in `tokenizers/` holds `tokenizer.json` and `tokenizer_config.json`, so it loads with
 `AutoTokenizer.from_pretrained` and can go on the Hugging Face Hub like any other tokenizer. The build
-is deterministic and takes under a second, so git keeps only the two small machines' files.
+is deterministic and takes under a second, so git keeps only the small machines' files.
 
 `python -m tokcpu hub your-name/tokcpu` stages all of them as one Hub repo in `build/hub`: the universal
 tokenizer at the root, with Hello World's tape as `start.txt`, and the others in subfolders. `--push`
@@ -165,6 +194,7 @@ tokcpu/machine.py     the machine model: one head on a string tape, two-characte
 tokcpu/compile.py     machine -> tokenizer.json (BPE merges, added tokens, the tag-deleting decoder)
 tokcpu/small.py       rung 1: a binary counter, the 4-state busy beaver, any Turing machine table
 tokcpu/bf.py          rungs 2 and 3: the Brainfuck compiler, the universal interpreter, a reference interpreter
+tokcpu/blocks.py      parallel ticks: a block cellular automaton, and the sorter
 tokcpu/__main__.py    build, run, and stage the Hub repo
 tokcpu/hub_card.md    the Hub repo's model card
 programs/             hello, alphabet, grid, jumps, and reverse (reads input)

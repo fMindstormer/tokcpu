@@ -7,7 +7,8 @@
     python -m tokcpu run tokenizers/hello --auto   (through transformers' AutoTokenizer)
     python -m tokcpu hub USER/tokcpu [--push]      stage (and upload) the Hugging Face Hub repo
 
-A run ticks `decode(encode(tape))` until the tape stops changing. Nothing else touches the tape.
+A run ticks `decode(encode(tape))` until the tape stops changing, or until it repeats every two ticks
+(a block automaton that has settled, see blocks.py). Nothing else touches the tape.
 """
 
 from __future__ import annotations
@@ -19,7 +20,7 @@ import sys
 import time
 from pathlib import Path
 
-from . import bf, small
+from . import bf, blocks, small
 from .compile import save
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -47,6 +48,9 @@ def build(out: Path, web: bool = True) -> None:
             if tape is not None:
                 meta["start"] = tape
             (d / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, separators=(",", ":")))
+    spec, rules, tape = blocks.sorter()
+    path = save(spec, out / "sort", tape)
+    print(f"{'sort':22s} {len(rules):6d} rules  {path.stat().st_size / 1e6:6.2f} MB")
 
 
 def hub(repo: str, out: Path, push: bool) -> None:
@@ -118,18 +122,22 @@ def main(argv=None) -> int:
         tok = Tokenizer.from_file(str(d / "tokenizer.json"))
         enc, dec = (lambda t: tok.encode(t).ids), tok.decode
 
-    n, t0 = 0, time.time()
+    n, t0, prev, how = 0, time.time(), None, "stopped"
     if a.show:
         print(f"{n:>9} {tape}")
     while n < a.max:
         nxt = dec(enc(tape))
         if nxt == tape:
+            how = "halted"
             break
-        tape, n = nxt, n + 1
+        if nxt == prev:                          # settled one tick ago
+            tape, n, how = prev, n - 1, "settled (the tape repeats every 2 ticks)"
+            break
+        prev, tape, n = tape, nxt, n + 1
         if a.show and n % a.show == 0:
             print(f"{n:>9} {tape}")
     dt = time.time() - t0
-    print(f"\n{'halted' if n < a.max else 'stopped'} after {n:,} ticks in {dt:.2f} s ({n / max(dt, 1e-9):,.0f} ticks/s)")
+    print(f"\n{how} after {n:,} ticks in {dt:.2f} s ({n / max(dt, 1e-9):,.0f} ticks/s)")
     if bf.OUT_END in tape:
         print("output:", bf.read_output(tape).decode("latin-1"), end="" if bf.read_output(tape).endswith(b"\n") else "\n")
     print("tape:  ", tape)

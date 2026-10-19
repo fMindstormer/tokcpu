@@ -41,15 +41,19 @@ def tag(i: int) -> str:
 
 def tokenizer_spec(m: Machine) -> dict:
     m.validate()
-    chars = m.alphabet()
+    return spec(m.alphabet(), m.rules)
+
+
+def spec(chars: list[str], rules: dict[str, str], pre_tokenizer: dict | None = None) -> dict:
+    """tokenizer.json for any table of two-character windows -> outputs over these characters."""
     assert not any(TAG0 <= ord(c) < TAG0 + TAGS for c in chars), "tape characters may not be tag characters"
-    windows = sorted(m.rules)
+    windows = sorted(rules)
     C, M = len(chars), len(windows)
     vocab = {c: i for i, c in enumerate(chars)}
     seen: dict[str, int] = {}
     added = []
     for k, w in enumerate(windows):
-        out = m.rules[w]
+        out = rules[w]
         seen[out] = seen.get(out, 0) + 1
         vocab[w] = C + M + k
         added.append({"id": C + M + k, "content": out + tag(seen[out]), "single_word": False, "lstrip": False,
@@ -57,7 +61,7 @@ def tokenizer_spec(m: Machine) -> dict:
     return {
         "version": "1.0", "truncation": None, "padding": None,
         "added_tokens": added,
-        "normalizer": None, "pre_tokenizer": None, "post_processor": None,
+        "normalizer": None, "pre_tokenizer": pre_tokenizer, "post_processor": None,
         "decoder": {"type": "Sequence", "decoders": [
             {"type": "Replace", "pattern": {"Regex": TAG_CLASS}, "content": ""},
             {"type": "Fuse"}]},
@@ -67,14 +71,15 @@ def tokenizer_spec(m: Machine) -> dict:
     }
 
 
-def save(m: Machine, directory: str | Path, start: str | None = None) -> Path:
-    """Write tokenizer.json, a tokenizer_config.json (so AutoTokenizer can load the folder) and, if
-    given, the machine's starting tape as start.txt."""
+def save(m: Machine | dict, directory: str | Path, start: str | None = None) -> Path:
+    """Write tokenizer.json (from a Machine, or a ready spec), a tokenizer_config.json (so AutoTokenizer
+    can load the folder) and, if given, the machine's starting tape as start.txt."""
     d = Path(directory)
     d.mkdir(parents=True, exist_ok=True)
     if start is not None:
         (d / "start.txt").write_text(start)
-    (d / "tokenizer.json").write_text(json.dumps(tokenizer_spec(m), ensure_ascii=False, separators=(",", ":")))
+    s = m if isinstance(m, dict) else tokenizer_spec(m)
+    (d / "tokenizer.json").write_text(json.dumps(s, ensure_ascii=False, separators=(",", ":")))
     (d / "tokenizer_config.json").write_text(json.dumps({
         "tokenizer_class": "PreTrainedTokenizerFast", "clean_up_tokenization_spaces": False,
         "model_max_length": 1_000_000_000}))
