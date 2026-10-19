@@ -220,7 +220,14 @@ while (nxt := <b>tok.decode(tok.encode(tape))</b>) != tape:
     <h2>The ladder</h2>
     <p><b>Rung 1, small machines.</b> A binary counter (7 rules) and the 4-state busy beaver (24 rules), which halts after exactly 107 ticks with 13 ones on the tape, its known record.</p>
     <p><b>Rung 2, one program per tokenizer.</b> A compiler turns a Brainfuck program into a machine whose states are the program. Each instruction is one tick, and printing walks the byte to the output at the left of the tape, one nibble at a time. Hello World becomes 38,265 rules and prints in 1,194 ticks.</p>
+    <p><b>Your own machine.</b> The last tab compiles a Turing machine you type into a new tokenizer, right in this page, and runs it. The compiler is a JavaScript port of the Python one and writes the same file, byte for byte.</p>
     <p><b>Rung 3, one tokenizer for every program.</b> A universal interpreter of 17,210 rules. The program is written on the tape. The head carries each instruction from <code>▼</code>, the instruction pointer, to <code>▲</code>, the data pointer, executes it there and walks back. Data cells are Braille characters, whose dots spell the byte. Loops can nest 64 deep. Input waits at the right end of the tape after <code>¦</code>, and <code>,</code> takes its first character.</p>
+  </section>
+
+  <section>
+    <h2>Parallel ticks</h2>
+    <p>One encode reads the whole tape, but a single head uses two characters of it. Heads that never meet each get their rule applied in the same tick: two busy beavers on one tape finish together in 107 ticks.</p>
+    <p>Going further, a stock <code>Split</code> pre-tokenizer can cut the tape into two-character blocks before BPE runs. With a merge for every block, one tick rewrites the whole tape: a block cellular automaton. A phase mark after the left edge shifts the blocks by one character every other tick, so information crosses block boundaries. The demo sorts letters, odd-even transposition sort, one round per tick: <code>⊢◦thequickbrownfoxjumpsoverthelazydog⊣</code> is sorted after 30 ticks, with 704 rules.</p>
   </section>
 
   <section>
@@ -237,15 +244,17 @@ while (nxt := <b>tok.decode(tok.encode(tape))</b>) != tape:
         <tr><td>Reverse, input <code>stressed</code></td><td class="num">1,904</td></tr>
       </tbody>
     </table></div>
-    <p class="small">Clock speed on the universal tokenizer running Hello World: about 9,600 ticks a second with the <code>tokenizers</code> library, 5,900 through <code>transformers</code>' AutoTokenizer, and 10,000 with transformers.js in Node, on one core of a cloud machine. Every tick of every run in the test suite is checked against the machine's own rules, and every output against a plain Brainfuck interpreter, in Python and in transformers.js.</p>
+    <p class="small">Clock speed on the universal tokenizer running Hello World, best of three runs on an Apple M4: about 9,200 ticks a second with the <code>tokenizers</code> library, 5,900 through <code>transformers</code>' AutoTokenizer, 11,700 with transformers.js in Node, and 17,300 with this page in headless Chromium. Every tick of every run in the test suite is checked against the machine's own rules, and every output against a plain Brainfuck interpreter, in Python and in transformers.js.</p>
   </section>
 
   <section>
     <h2>Run it yourself</h2>
-<pre>pip install tokenizers transformers
+<pre>pip install -r requirements.txt
 python -m tokcpu build                                   # writes tokenizers/
 python -m tokcpu run tokenizers/brainfuck programs/hello.bf --auto
-python -m tokcpu run tokenizers/4-state-busy-beaver --show 1</pre>
+python -m tokcpu run tokenizers/brainfuck programs/reverse.bf --input stressed
+python -m tokcpu run tokenizers/4-state-busy-beaver --show 1
+python -m tokcpu run tokenizers/sort --show 2</pre>
     <p>The tokenizer folders load with <code>AutoTokenizer.from_pretrained</code>, so they can go on the Hugging Face Hub like any other.</p>
   </section>
 </main>
@@ -293,7 +302,15 @@ B 1 1 R B
 B 0 0 L C   // at the end, step back
 C 1 0 S H   // and remove one 1` },
 };
-let downloads = [];             // object URLs of the last compile
+let downloads = [], compiled = [];   // object URLs and texts of the last compile
+// Inside claude.ai the page is framed and saves files through the downloads capability; served
+// anywhere else, the links are plain downloads.
+let saver = null;
+const framed = window.top !== window;
+(window.claude?.use ? window.claude.use("downloads") : Promise.resolve(null)).then((d) => {
+  saver = d;
+  if (!d && framed && window.claude) $("downloads").dataset.off = "1";
+});
 
 let PTT = null;               // transformers.js PreTrainedTokenizer
 const cache = new Map();      // machine id -> {tok, meta}
@@ -352,9 +369,10 @@ function compileCustom() {
   const start = m.start.slice(0, -1) + $("tmtape").value + RIGHT;
   const meta = { markers: m.markerOf, rules: m.rules.size, bytes: new TextEncoder().encode(text).length, config: CONFIG, start };
   for (const u of downloads) URL.revokeObjectURL(u);
-  downloads = [text, JSON.stringify(CONFIG)].map((t) => URL.createObjectURL(new Blob([t], { type: "application/json" })));
+  compiled = [text, JSON.stringify(CONFIG)];
+  downloads = compiled.map((t) => URL.createObjectURL(new Blob([t], { type: "application/json" })));
   [$("dl-tok").href, $("dl-cfg").href] = downloads;
-  $("downloads").hidden = false;
+  $("downloads").hidden = $("downloads").dataset.off === "1";
   return { tok: new PTT(sp, CONFIG), meta, byName: {} };
 }
 
@@ -513,6 +531,17 @@ function setup() {
   preset();
   $("tmpreset").addEventListener("change", () => { preset(); choose(MACHINES.find((m) => m.custom)); });
   $("compile").addEventListener("click", () => choose(MACHINES.find((m) => m.custom)));
+  for (const [id, k] of [["dl-tok", 0], ["dl-cfg", 1]]) {
+    $(id).addEventListener("click", (e) => {
+      if (!saver) return;                      // a plain download link
+      e.preventDefault();
+      saver.save({ filename: $(id).getAttribute("download"), data: compiled[k] }).catch((err) => {
+        if (err.code === "declined") return;
+        if (err.code === "rate_limited") status("a save is already waiting for an answer", "err");
+        else { status("this view cannot save files", "err"); $("downloads").hidden = true; }
+      });
+    });
+  }
   $("run").addEventListener("click", () => {
     if (!cur || !tape) return;
     if (halted) reset();

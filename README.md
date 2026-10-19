@@ -22,8 +22,8 @@ written there too:
 ```
 
 **Interactive page:** https://claude.ai/artifact/GXyttZQHii8GFLEjKhMZe9 (private until you share it from
-its Share menu). It runs these same files in the browser with transformers.js. The version in `web/`
-also compiles Turing machines you type into new tokenizers you can download.
+its Share menu). It runs these same files in the browser with transformers.js, and compiles Turing
+machines you type into new tokenizers you can download.
 
 ## How one tick works
 
@@ -114,14 +114,14 @@ U+0100 + (byte − 128) above 127.
 
 ### Clock speed
 
-The universal tokenizer running Hello World, on one core of a cloud machine:
+The universal tokenizer running Hello World (154,137 ticks), best of three runs on an Apple M4:
 
 | Library | Ticks a second |
 |---|---:|
-| `tokenizers` (Rust, from Python) | 9,600 |
-| `transformers` AutoTokenizer | 5,900 |
-| transformers.js 3.7.6 in Node | 10,000 |
-| transformers.js in Chromium (the page) | 8,000 |
+| `tokenizers` 0.23 (Rust, from Python) | 9,200 |
+| `transformers` 5.20 AutoTokenizer | 5,900 |
+| transformers.js 3.7.6 in Node | 11,700 |
+| transformers.js in headless Chromium (the page) | 17,300 |
 
 Speed does not depend on the number of rules; it falls slowly as the tape gets longer.
 
