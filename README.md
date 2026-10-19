@@ -22,7 +22,8 @@ written there too:
 ```
 
 **Interactive page:** https://claude.ai/artifact/GXyttZQHii8GFLEjKhMZe9 (private until you share it from
-its Share menu). It runs these same files in the browser with transformers.js.
+its Share menu). It runs these same files in the browser with transformers.js. The version in `web/`
+also compiles Turing machines you type into new tokenizers you can download.
 
 ## How one tick works
 
@@ -161,7 +162,9 @@ sorts.
 - the files survive the library's own save and reload, and run through `transformers`' AutoTokenizer;
 - with transformers.js installed (`cd tests && npm install`), the compiled Hello World runs tick for
   tick the same in JavaScript;
-- the sorter and two heads on one tape are checked tick for tick against a direct reference step.
+- the sorter and two heads on one tape are checked tick for tick against a direct reference step;
+- the page's own compiler (`web/tokcpu.js`) writes the same `tokenizer.json` as Python, byte for byte,
+  for the busy beaver and 20 random machines.
 
 Tested with `tokenizers` 0.22 and 0.23, `transformers` 4.57 and 5.20, and transformers.js 3.7.6, on
 Python 3.13. CI also runs Python 3.10.
@@ -200,6 +203,7 @@ tokcpu/hub_card.md    the Hub repo's model card
 programs/             hello, alphabet, grid, jumps, and reverse (reads input)
 tests/                the checks above, and the transformers.js runner
 web/                  the interactive page; `build` copies its tokenizers into web/tok/
+web/tokcpu.js         the page's compiler: a Turing machine table -> tokenizer.json, in JavaScript
 ```
 
 ## License

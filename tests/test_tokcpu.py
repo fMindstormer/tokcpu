@@ -2,6 +2,7 @@
 Brainfuck output against a plain interpreter."""
 
 import json
+import random
 import shutil
 import subprocess
 from pathlib import Path
@@ -156,6 +157,27 @@ def test_errors_halt(universal):
         bf.compile_program(",")
     with pytest.raises(ValueError):
         bf.compile_program("[")
+
+
+def test_page_compiler_matches(tmp_path):
+    """The page's compiler (web/tokcpu.js) writes the same tokenizer.json as Python, byte for byte."""
+    if not shutil.which("node"):
+        pytest.skip("node not installed")
+    rng = random.Random(1)
+    tables = [(small.BUSY_BEAVER_4, "0")]
+    for _ in range(20):
+        syms, states = rng.sample('01#$x"\\ab', 4), "ABCD"
+        table = {(q, a): (rng.choice(syms), rng.choice("RLS"), rng.choice(states + "H"))
+                 for q in states for a in syms if rng.random() < 0.8}
+        table[("A", syms[0])] = (syms[1], "R", "B")
+        tables.append((dict(sorted(table.items(), key=lambda kv: kv[0][0] != "A")), syms[0]))
+    for table, blank in tables:
+        m, tape = small.turing(table, "t", blank=blank)
+        (tmp_path / "t.txt").write_text("".join(f"{q} {a} {b} {d} {n}\n" for (q, a), (b, d, n) in table.items()))
+        out = subprocess.run(["node", str(ROOT / "tests" / "js_compile.mjs"), str(tmp_path / "t.txt"), blank],
+                             capture_output=True, text=True, check=True).stdout.split("\n")
+        assert out[0] == json.dumps(tokenizer_spec(m), ensure_ascii=False, separators=(",", ":"))
+        assert out[1] == tape
 
 
 def test_transformers_js(tmp_path):

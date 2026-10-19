@@ -70,9 +70,12 @@ button:focus-visible, select:focus-visible, textarea:focus-visible, input:focus-
 button:disabled { opacity: 0.45; cursor: default; }
 select { font: 0.85rem var(--text); color: var(--ink); background: var(--sheet); border: 1px solid var(--line); border-radius: 8px; padding: 0.35rem 0.5rem; }
 label.small, .small { font-size: 0.82rem; color: var(--muted); }
+[hidden] { display: none !important; }
 .prog { display: grid; gap: 0.4rem; }
 textarea { width: 100%; min-height: 4.6rem; font: 0.8rem/1.5 var(--mono); color: var(--ink); background: var(--code-bg);
   border: 1px solid var(--line); border-radius: 8px; padding: 0.6rem; resize: vertical; word-break: break-all; }
+#table { min-height: 10.5rem; }
+input[type="text"].narrow { flex: 0 0 3rem; text-align: center; }
 input[type="text"] { flex: 1; min-width: 0; font: 0.8rem var(--mono); color: var(--ink); background: var(--code-bg);
   border: 1px solid var(--line); border-radius: 8px; padding: 0.4rem 0.6rem; }
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); gap: 0.8rem; }
@@ -141,6 +144,22 @@ while (nxt := <b>tok.decode(tok.encode(tape))</b>) != tape:
         <label class="small" for="input">Input for <code>,</code></label>
         <input type="text" id="input" spellcheck="false" autocomplete="off">
       </div>
+    </div>
+    <div class="prog" id="tmbox" hidden>
+      <div class="row">
+        <label class="small" for="tmpreset">Start from</label>
+        <select id="tmpreset"></select>
+        <span class="small">one rule a line: <code>state read write move next</code>, where move is <code>R</code>, <code>L</code> or <code>S</code>. The first rule's state starts; a state with no rules halts.</span>
+      </div>
+      <textarea id="table" spellcheck="false" aria-label="Turing machine table"></textarea>
+      <div class="row">
+        <label class="small" for="blank">Blank</label>
+        <input type="text" class="narrow" id="blank" maxlength="1" spellcheck="false" autocomplete="off">
+        <label class="small" for="tmtape">Tape</label>
+        <input type="text" id="tmtape" spellcheck="false" autocomplete="off">
+        <button class="act ghost" id="compile">Compile</button>
+      </div>
+      <p class="small" id="downloads" hidden>This page compiled it into <a id="dl-tok" download="tokenizer.json" href="#">tokenizer.json</a>. With <a id="dl-cfg" download="tokenizer_config.json" href="#">tokenizer_config.json</a> beside it, it loads with <code>AutoTokenizer.from_pretrained</code>.</p>
     </div>
     <div class="row">
       <button class="act" id="run">Run</button>
@@ -233,6 +252,7 @@ python -m tokcpu run tokenizers/4-state-busy-beaver --show 1</pre>
 <footer class="wrap">This page loads <code>tokenizer.json</code> files and runs them with transformers.js 3.7.6, the JavaScript port of Hugging Face Transformers. The labels on the head chip come from a small side file that names each state; the tokenizer itself does all the work.</footer>
 
 <script type="module">
+import { parseTable, turing, spec, stringify, CONFIG } from "./tokcpu.js";
 const $ = (id) => document.getElementById(id);
 const LEFT = "⊢", RIGHT = "⊣", OUT_END = "┃", PROG_END = "║", IP = "▼", DP = "▲";
 const HALF = "⓪①②③④⑤⑥⑦⑧⑨ⓐⓑⓒⓓⓔⓕ";   // a printed byte's high nibble, waiting for its low one
@@ -250,7 +270,30 @@ const MACHINES = [
   { id: "hello", label: "Hello World, compiled", dir: "tok/hello" },
   { id: "beaver", label: "Busy beaver", dir: "tok/4-state-busy-beaver" },
   { id: "counter", label: "Binary counter", dir: "tok/binary-counter" },
+  { id: "custom", label: "Your own machine", custom: true },
 ];
+const TM_PRESETS = {
+  "4-state busy beaver": { blank: "0", tape: "", table: `A 0 1 R B
+A 1 1 L B
+B 0 1 L A
+B 1 0 L C
+C 0 1 R H
+C 1 1 L D
+D 0 1 R D
+D 1 0 R A` },
+  "3-state busy beaver": { blank: "0", tape: "", table: `A 0 1 R B
+A 1 1 R H
+B 0 0 R C
+B 1 1 R B
+C 0 1 L C
+C 1 1 L A` },
+  "Add in unary": { blank: "0", tape: "111+11", table: `A 1 1 R A   // walk over the first number
+A + 1 R B   // turn + into a 1
+B 1 1 R B
+B 0 0 L C   // at the end, step back
+C 1 0 S H   // and remove one 1` },
+};
+let downloads = [];             // object URLs of the last compile
 
 let PTT = null;               // transformers.js PreTrainedTokenizer
 const cache = new Map();      // machine id -> {tok, meta}
@@ -299,6 +342,20 @@ async function loadMachine(m) {
   const entry = { tok, meta, byName };
   cache.set(m.id, entry);
   return entry;
+}
+
+function compileCustom() {
+  const m = turing(parseTable($("table").value), $("blank").value || "0");
+  const sp = spec(m.chars, m.rules), text = stringify(sp);
+  for (const c of $("tmtape").value)
+    if (!m.chars.includes(c) || m.markerOf[c] || c === LEFT || c === RIGHT) throw new Error(`the tape holds "${c}", which no rule reads or writes`);
+  const start = m.start.slice(0, -1) + $("tmtape").value + RIGHT;
+  const meta = { markers: m.markerOf, rules: m.rules.size, bytes: new TextEncoder().encode(text).length, config: CONFIG, start };
+  for (const u of downloads) URL.revokeObjectURL(u);
+  downloads = [text, JSON.stringify(CONFIG)].map((t) => URL.createObjectURL(new Blob([t], { type: "application/json" })));
+  [$("dl-tok").href, $("dl-cfg").href] = downloads;
+  $("downloads").hidden = false;
+  return { tok: new PTT(sp, CONFIG), meta, byName: {} };
 }
 
 function tick(tok, t) {
@@ -354,6 +411,8 @@ function render() {
   // output
   const out = readOutput(tape);
   if (out !== null) { $("outlabel").textContent = "Output"; $("out").textContent = out || (ticks ? " " : "nothing printed yet"); }
+  else if (cur.id === "custom") { $("outlabel").textContent = "The tape";
+    $("out").textContent = Array.from(tape).filter((c) => c !== LEFT && c !== RIGHT && !cur.meta.markers[c]).join("") || " "; }
   else if (cur.id === "counter") { $("outlabel").textContent = "The number on the tape";
     const digits = Array.from(tape).filter((c) => c === "0" || c === "1").join(""); $("out").textContent = digits ? `${digits} = ${parseInt(digits, 2)}` : "0"; }
   else { $("outlabel").textContent = "Ones on the tape"; $("out").textContent = String(Array.from(tape).filter((c) => c === "1").length); }
@@ -423,13 +482,14 @@ function reset() {
 async function choose(m) {
   for (const b of $("machines").children) b.setAttribute("aria-pressed", b.dataset.id === m.id ? "true" : "false");
   $("progbox").hidden = !m.program;
+  $("tmbox").hidden = !m.custom;
   running = false;
-  status(`loading ${m.label}…`);
+  status(m.custom ? "compiling…" : `loading ${m.label}…`);
   try {
-    const entry = await loadMachine(m);
+    const entry = m.custom ? compileCustom() : await loadMachine(m);
     cur = { ...entry, def: m, id: m.id };
     reset();
-  } catch (e) { status(`could not load this tokenizer (${e.message})`, "err"); }
+  } catch (e) { cur = null; tape = ""; status(m.custom ? e.message : `could not load this tokenizer (${e.message})`, "err"); }
 }
 
 function setup() {
@@ -448,6 +508,11 @@ function setup() {
   });
   $("program").addEventListener("change", () => { if (cur) reset(); });
   $("input").addEventListener("change", () => { if (cur) reset(); });
+  $("tmpreset").innerHTML = Object.keys(TM_PRESETS).map((k) => `<option>${k}</option>`).join("");
+  const preset = () => { const p = TM_PRESETS[$("tmpreset").value]; $("table").value = p.table; $("blank").value = p.blank; $("tmtape").value = p.tape; };
+  preset();
+  $("tmpreset").addEventListener("change", () => { preset(); choose(MACHINES.find((m) => m.custom)); });
+  $("compile").addEventListener("click", () => choose(MACHINES.find((m) => m.custom)));
   $("run").addEventListener("click", () => {
     if (!cur || !tape) return;
     if (halted) reset();
