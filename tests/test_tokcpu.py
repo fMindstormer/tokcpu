@@ -180,18 +180,22 @@ def test_page_compiler_matches(tmp_path):
         assert out[1] == tape
 
 
-def test_fuzz_variants_agree_in_rust():
-    """The fuzzer's oracle and its equivalent file variants agree with the Rust library, so a runtime
-    that disagrees with them is the one that is wrong."""
+def test_fuzz_models_agree_with_rust():
+    """The fuzzer's models of each feature (equivalent variants, normalizers, pre-tokenizers, byte
+    fallback, added tokens that match the input) agree with the Rust library, so a runtime that
+    disagrees with them is the one that is wrong."""
     from tokcpu import fuzz
     rng = random.Random(2)
-    for _ in range(40):
+    seen = set()
+    for _ in range(60):
         m, start = fuzz.random_machine(rng)
-        tapes = fuzz.trace(m, start, 200)
-        for name, spec in fuzz.variants(m, rng).items():
-            tok = Tokenizer.from_str(json.dumps(spec, ensure_ascii=False))
-            for a, b in zip(tapes, tapes[1:]):
-                assert tok.decode(tok.encode(a).ids, skip_special_tokens=False) == b, name
+        tapes = fuzz.trace(m, start, 100)
+        for feat in fuzz.features(m, rng):
+            tok = Tokenizer.from_str(json.dumps(feat.spec, ensure_ascii=False))
+            for x, want in feat.pairs(rng, tapes):
+                assert tok.decode(tok.encode(x).ids, skip_special_tokens=False) == want, (feat.name, x)
+                seen.add(feat.name.split("/")[0])
+    assert seen == {"plain", "normalizer", "split", "whitespace-split", "byte-fallback", "added-literals"}
 
 
 def test_transformers_js(tmp_path):

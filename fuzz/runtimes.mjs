@@ -1,7 +1,7 @@
 // The JavaScript tokenizer runtimes for `python -m tokcpu fuzz`, as one long-lived process.
 // One JSON request per stdin line, one JSON answer per stdout line:
 //   {"op": "load", "dir": ...}                    load tokenizer.json + tokenizer_config.json everywhere
-//   {"op": "run", "trace": [tape0, tape1, ...]}   tick each runtime along the trace; first mismatch per runtime
+//   {"op": "run", "pairs": [[input, expected], ...]}   one tick per pair, in each runtime; first mismatch
 //   {"op": "tick", "runtime": name, "tape": ...}  one tick
 import fs from "fs";
 import readline from "readline";
@@ -35,13 +35,13 @@ const answer = {
     }
     return { runtimes: Object.keys(loaded), errors };
   },
-  run({ trace }) {
+  run({ pairs }) {
     const res = {};
     for (const name of Object.keys(loaded)) {
-      res[name] = { ok: true, ticks: trace.length - 1 };
-      for (let n = 0; n + 1 < trace.length; n++) {
-        const r = safe(() => tick(name, trace[n]));
-        if (r.error !== undefined || r.out !== trace[n + 1]) { res[name] = { ok: false, tick: n, ...r }; break; }
+      res[name] = { ok: true };
+      for (let n = 0; n < pairs.length; n++) {
+        const r = safe(() => tick(name, pairs[n][0]));
+        if (r.error !== undefined || r.out !== pairs[n][1]) { res[name] = { ok: false, tick: n, ...r }; break; }
       }
     }
     return res;

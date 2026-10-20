@@ -164,18 +164,46 @@ which one is wrong. Here the machine is an independent oracle: `Machine.step` sa
 must give without asking any tokenizer library.
 
 `python -m tokcpu fuzz` (`tokcpu/fuzz.py`) compiles random machines over awkward alphabets (spaces and
-controls, quotes and backslashes, combining marks, characters outside the Basic Multilingual Plane),
-writes each one in several variants the format says are equivalent (merges as `"a b"` strings, added
-tokens marked special or normalized, shuffled ids, no Fuse decoder), and runs every variant in every
-runtime it finds: `tokenizers`, `transformers`, and, after `cd fuzz && npm install`, transformers.js 3
-and 4 and `@huggingface/tokenizers`. A disagreement is checked again in a fresh process, shrunk to a
-one-tick tape, and kept with its tokenizer in `build/fuzz/`.
+controls, quotes and backslashes, combining marks, characters outside the Basic Multilingual Plane)
+and writes each one as several tokenizers, one per feature of the format:
 
-The first campaign (200 machines, 233,555 ticks per runtime) found one bug, in all three JavaScript
-runtimes at once: after some other tokenizer.json has been parsed in the same process, a vocab key
-such as `"` can come back as `\`, so the token silently disappears. The cause is below them, in V8's
-`JSON.parse`, which can misread an escaped key that follows a cached one. Node 22 is fine; Node 24
-and 25 and Chrome 139 are affected. It is a known V8 bug ([nodejs/node#63785](https://github.com/nodejs/node/issues/63785)),
+- **plain**: variants the format says are equivalent (merges as `"a b"` strings, added tokens marked
+  special or normalized, shuffled ids, no Fuse decoder);
+- **normalizers**: Lowercase, NFC, NFD, NFKC, NFKD, Strip, Replace and a Sequence, with input noise the
+  normalizer must undo (capitals, decomposed or full-width characters, padding);
+- **Split pre-tokenizers**: every behaviour, with the pattern written six ways, and separators
+  sprinkled on the tape; a rule may only fire if its window lies in one piece;
+- **WhitespaceSplit**, with Unicode whitespace and look-alikes that are not whitespace;
+- **byte fallback**: characters outside the vocab must survive as byte tokens;
+- **added tokens that occur in the input**, with `lstrip` and `rstrip`.
+
+For each feature a small model in `fuzz.py` says what a tick must give, written from the format's
+documented behaviour; a test checks every model against the Rust library first. Every tokenizer then
+runs in every runtime it finds: `tokenizers`, `transformers`, and, after `cd fuzz && npm install`,
+transformers.js 3.7.6 and 4.3.1 and `@huggingface/tokenizers` 0.2.0 (`--node` picks the Node binary).
+A disagreement is checked again in a fresh process, shrunk to a one-tick input, and kept with its
+tokenizer in `build/fuzz/`.
+
+### What it found
+
+On Node 22, 200 machines and about 372,000 ticks: the two Python runtimes agreed with the models
+everywhere. The three JavaScript runtimes disagreed in the same ways, which small probes then pinned
+down (all agree with each other, so these are disagreements with the Rust library, the reference):
+
+| | Disagreement | Runtimes |
+|---|---|---|
+| A | Whitespace means JavaScript's `\s`, not Unicode White_Space: U+FEFF (byte order mark) is stripped or split on, U+0085 (next line) is not. Affects WhitespaceSplit, Strip, and `lstrip`/`rstrip` of added tokens | all three |
+| B | A Split with a `String` pattern and behaviour `Removed` keeps the separator (the same pattern as a `Regex` works) | all three |
+| C | A Split with `invert: true` is wrong for every behaviour but `Removed` | all three |
+| D | A character missing from the vocab, with no `unk_token`: Rust drops it before merging, so `aßb` becomes `ab`; JavaScript merges around it and gives `a`, `b` | 4.3.1, tokenizers.js; 3.7.6 emits a `null` id and crashes in decode |
+| E | An added token's `id`: Rust ignores it and numbers added tokens after the vocab; JavaScript uses it, so the same file gives the model different ids | all three |
+| F | The Oniguruma escape `\x{B6}` in a regex fails to load | 3.7.6 (fixed in 4.3.1) |
+
+C, D and E came from probes rather than the fuzzer's own features; adding them as features is next.
+
+On Node 24 and 25 and in Chrome 139 there is one more, below all of them: V8's `JSON.parse` can misread
+an escaped key, such as a vocab entry `"`, after an earlier parse in the same process, so the token
+silently disappears. It is a known V8 bug ([nodejs/node#63785](https://github.com/nodejs/node/issues/63785)),
 fixed in V8 and awaiting a Node 24 backport ([nodejs/node#66542](https://github.com/nodejs/node/pull/66542)).
 Six popular Hub tokenizers loaded one after another in Node 24 came through intact.
 
