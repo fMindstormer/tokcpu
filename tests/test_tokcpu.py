@@ -213,3 +213,33 @@ def test_transformers_js(tmp_path):
                          capture_output=True, text=True, check=True, cwd=ROOT / "tests").stdout
     res = json.loads(out.strip().splitlines()[-1])
     assert res["firstMismatch"] == -1 and res["ticks"] == len(trace) - 1
+
+
+def test_compat_finds_final_sigma(tmp_path):
+    """`check` flags a real JavaScript difference against both Python references, and nothing on plain
+    text: a WordPiece tokenizer that lowercases, where JavaScript's toLowerCase turns a word-final Σ into ς
+    and Python gives σ (needs node and `npm install` in fuzz/)."""
+    if not shutil.which("node") or not (ROOT / "fuzz" / "node_modules" / "tj4").exists():
+        pytest.skip("fuzz/ runtimes not installed")
+    from tokenizers import models, normalizers, pre_tokenizers
+    from tokcpu import compat
+    vocab = {w: i for i, w in enumerate(["[UNK]", "[CLS]", "[SEP]", "σοφοσ", "σοφος", "the", "dog", "."])}
+    tok = Tokenizer(models.WordPiece(vocab, unk_token="[UNK]"))
+    tok.normalizer = normalizers.BertNormalizer(lowercase=True)
+    tok.pre_tokenizer = pre_tokenizers.BertPreTokenizer()
+    tok.save(str(tmp_path / "tokenizer.json"))
+    (tmp_path / "tokenizer_config.json").write_text(json.dumps({"tokenizer_class": "PreTrainedTokenizerFast", "unk_token": "[UNK]"}))
+    old = compat.TEXTS
+    compat.TEXTS = {"english": ("everyday", "The dog."), "greek": ("languages", "ΣΟΦΟΣ")}
+    js = compat.Js()
+    try:
+        r = compat.check_dir(tmp_path, js)
+    finally:
+        js.close()
+        compat.TEXTS = old
+    assert r["references"] == {"tokenizers": "ok", "transformers": "ok"}
+    for rt in compat.RUNTIMES:
+        diffs = r["runtimes"][rt]["differences"]
+        assert set(diffs) == {"greek"}, rt
+        assert diffs["greek"]["verdict"] == "both" and diffs["greek"]["cause"] == "final sigma (toLowerCase)"
+        assert diffs["greek"]["python"] == ["σοφοσ"] and diffs["greek"]["js"] == ["σοφος"]

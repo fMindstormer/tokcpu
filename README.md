@@ -207,6 +207,37 @@ silently disappears. It is a known V8 bug ([nodejs/node#63785](https://github.co
 fixed in V8 and awaiting a Node 24 backport ([nodejs/node#66542](https://github.com/nodejs/node/pull/66542)).
 Six popular Hub tokenizers loaded one after another in Node 24 came through intact.
 
+### Real tokenizers
+
+The fuzzer's tokenizers are built to be awkward. To see what reaches real models, `python -m tokcpu
+check <repo>...` (`tokcpu/compat.py`) runs Hub tokenizers through the same three JavaScript runtimes on 42
+texts (everyday text, 15 languages and scripts, Unicode edge cases, stress cases), and compares their ids
+and decoded text with Python. Python has two references: `tokenizers` reading the file as written, and
+`transformers`' AutoTokenizer, which adds model-specific behaviour (CLIP's decode turns `</w>` into
+spaces). A difference counts only if JavaScript differs from both, or from the only one that loads the
+model; where they disagree with each other, JavaScript always sides with one of them.
+
+`python -m tokcpu compat --top 1000` does this for the most-downloaded models, once per distinct
+`tokenizer.json`. In October 2026, on Node 22 against `transformers` 5.20 and `tokenizers` 0.23, 500 of
+the top 1,000 models had a tokenizer.json (220 distinct files). In transformers.js 4.3.1 and
+tokenizers.js 0.2.0, 375 of the 500 matched Python on every text; transformers.js 3.7.6 matched on 362.
+Weighted by downloads, the share that matched everywhere was 48%, because the popular BERT-style models
+differ on one rare character:
+
+| Cause | Models (transformers.js 4) | What happens |
+|---|---|---|
+| Final sigma | 84 | Lowercasing a capital Σ at the end of a word gives ς in JavaScript (`toLowerCase` is context-sensitive) and σ in Python. 69 BERT-style WordPiece models (`bert-base-uncased`, `all-MiniLM-L6-v2`, the BGE and E5 families) and 15 CLIP models |
+| Whitespace (A above) | 44 | U+FEFF and U+0085 |
+| Other | 8 | Arabic-Indic digits in a ByteLevel split, runs of spaces in Metaspace, a zero-width joiner in a Precompiled normalizer |
+| Byte fallback ignored | 3 | A Unigram model's `byte_fallback` is not applied, so characters outside the vocab become `<unk>` ([tokenizers.js#26](https://github.com/huggingface/tokenizers.js/issues/26)); SigLIP and ruri-v3 lose German, Chinese and emoji this way |
+| Throws | 3 | Decoding an empty list of ids throws instead of returning "" |
+
+On everyday text, only those three byte-fallback models and five others differ. transformers.js 3.7.6
+also drops the leading `▁` of Metaspace tokenizers with `prepend_scheme: "first"` (11 models), fixed in 4.
+
+The results are on a [dashboard](https://claude.ai/artifact/CnCFwFeqHXPsNTKdyuod3d), and `--out` keeps them
+as JSON. The run takes about an hour, mostly waiting on the Hub's rate limit, and resumes where it stopped.
+
 ## Checking it
 
 `python -m pytest tests` (about a minute; CI runs it on every push):
@@ -254,7 +285,8 @@ tokcpu/small.py       rung 1: a binary counter, the 4-state busy beaver, any Tur
 tokcpu/bf.py          rungs 2 and 3: the Brainfuck compiler, the universal interpreter, a reference interpreter
 tokcpu/blocks.py      parallel ticks: a block cellular automaton, and the sorter
 tokcpu/fuzz.py        differential fuzzing of tokenizer runtimes, with the machine as oracle
-fuzz/                 the JavaScript runtimes for the fuzzer (runtimes.mjs) and their pinned versions
+tokcpu/compat.py      the same runtimes against Python on real Hub tokenizers
+fuzz/                 the JavaScript runtimes for the fuzzer (runtimes.mjs) and compat (compat.mjs), pinned
 tokcpu/__main__.py    build, run, and stage the Hub repo
 tokcpu/hub_card.md    the Hub repo's model card
 programs/             hello, alphabet, grid, jumps, and reverse (reads input)

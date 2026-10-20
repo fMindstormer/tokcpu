@@ -7,6 +7,8 @@
     python -m tokcpu run tokenizers/hello --auto   (through transformers' AutoTokenizer)
     python -m tokcpu hub USER/tokcpu [--push]      stage (and upload) the Hugging Face Hub repo
     python -m tokcpu fuzz --cases 200              differential fuzzing of tokenizer runtimes
+    python -m tokcpu check MODEL [MODEL...]        does a Hub tokenizer give the same ids in JavaScript?
+    python -m tokcpu compat --top 1000             ...for the most-downloaded models, as one JSON
 
 A run ticks `decode(encode(tape))` until the tape stops changing, or until it repeats every two ticks
 (a block automaton that has settled, see blocks.py). Nothing else touches the tape.
@@ -97,6 +99,13 @@ def main(argv=None) -> int:
     f.add_argument("--limit", type=int, default=300, help="most ticks per machine")
     f.add_argument("--out", default=str(ROOT / "build" / "fuzz"))
     f.add_argument("--node", default="node", help="the node binary for the JavaScript runtimes")
+    c = sub.add_parser("check", help="compare a Hub model's tokenizer in Python and in JavaScript")
+    c.add_argument("repos", nargs="+")
+    c.add_argument("--node", default="node", help="the node binary for the JavaScript runtimes")
+    k = sub.add_parser("compat", help="check the most-downloaded models' tokenizers")
+    k.add_argument("--top", type=int, default=1000)
+    k.add_argument("--out", default=str(ROOT / "build" / "compat" / "results.json"))
+    k.add_argument("--node", default="node", help="the node binary for the JavaScript runtimes")
     a = ap.parse_args(argv)
 
     if a.cmd == "build":
@@ -104,6 +113,13 @@ def main(argv=None) -> int:
         return 0
     if a.cmd == "hub":
         hub(a.repo, Path(a.out), a.push)
+        return 0
+    if a.cmd == "check":
+        from .compat import check
+        return check(a.repos, a.node)
+    if a.cmd == "compat":
+        from .compat import compat
+        compat(a.top, Path(a.out), a.node)
         return 0
     if a.cmd == "fuzz":
         from .fuzz import fuzz
