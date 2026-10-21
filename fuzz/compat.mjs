@@ -7,18 +7,22 @@
 //   {"op": "versions"}
 // Each runtime is named by the version installed, so CI can install the latest releases over the pinned ones:
 //   npm install --no-save tj4@npm:@huggingface/transformers@latest @huggingface/tokenizers@latest
+// `node compat.mjs tj3` loads only that one (tj3, tj4, tokenizers; all by default). tokcpu/compat.py runs one
+// process per runtime: on Linux, the two transformers.js versions' onnxruntime builds cannot share a process.
 import fs from "fs";
 import readline from "readline";
-import * as tj3 from "tj3";
-import * as tj4 from "tj4";
-import { Tokenizer } from "@huggingface/tokenizers";
 
 const version = (dir) => JSON.parse(fs.readFileSync(new URL(`node_modules/${dir}/package.json`, import.meta.url), "utf8")).version;
-const MAKERS = {
-  [`transformers.js@${version("tj3")}`]: (j, c) => new tj3.PreTrainedTokenizer(j, c),
-  [`transformers.js@${version("tj4")}`]: (j, c) => new tj4.PreTrainedTokenizer(j, c),
-  [`@huggingface/tokenizers@${version("@huggingface/tokenizers")}`]: (j, c) => new Tokenizer(j, c),
+const RUNTIMES = {
+  tj3: async () => [`transformers.js@${version("tj3")}`, (await import("tj3")).PreTrainedTokenizer],
+  tj4: async () => [`transformers.js@${version("tj4")}`, (await import("tj4")).PreTrainedTokenizer],
+  tokenizers: async () => [`@huggingface/tokenizers@${version("@huggingface/tokenizers")}`, (await import("@huggingface/tokenizers")).Tokenizer],
 };
+const MAKERS = {};
+for (const which of process.argv.length > 2 ? process.argv.slice(2) : Object.keys(RUNTIMES)) {
+  const [name, Class] = await RUNTIMES[which]();
+  MAKERS[name] = (j, c) => new Class(j, c);
+}
 const message = (e) => String((e && e.message) || e).slice(0, 300);
 let loaded = {};
 

@@ -85,20 +85,47 @@ TEXTS = {   # name -> (group, text)
     "single-space": ("stress", " "),
 }
 class Js:
-    """fuzz/compat.mjs, the JavaScript runtimes."""
+    """fuzz/compat.mjs, the JavaScript runtimes, one process each (on Linux, two transformers.js versions'
+    onnxruntime builds cannot share a process), answering as one."""
 
     def __init__(self, node: str = "node"):
-        self.err = tempfile.TemporaryFile()
-        self.p = subprocess.Popen([node, str(ROOT / "fuzz" / "compat.mjs")], cwd=ROOT / "fuzz", text=True, encoding="utf-8",
-                                  stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=self.err)
+        self.parts = [Node(node, which) for which in ("tj3", "tj4", "tokenizers")]
 
     def ask(self, **req):
+        for p in self.parts:
+            p.send(req)
+        answers = [p.receive() for p in self.parts]
+        if req["op"] == "versions":
+            return answers[0] | {"jsonParseBug": any(a["jsonParseBug"] for a in answers),
+                                 "runtimes": [rt for a in answers for rt in a["runtimes"]]}
+        if failed := next((a for a in answers if "error" in a), None):
+            return failed
+        if req["op"] == "load":
+            return {"runtimes": [rt for a in answers for rt in a["runtimes"]], "errors": {k: v for a in answers for k, v in a["errors"].items()}}
+        return {k: v for a in answers for k, v in a.items()}
+
+    def close(self):
+        for p in self.parts:
+            p.close()
+
+
+class Node:
+    """One fuzz/compat.mjs process."""
+
+    def __init__(self, node: str, *runtimes: str):
+        self.err = tempfile.TemporaryFile()
+        self.p = subprocess.Popen([node, str(ROOT / "fuzz" / "compat.mjs"), *runtimes], cwd=ROOT / "fuzz", text=True,
+                                  encoding="utf-8", stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=self.err)
+
+    def send(self, req: dict):
         try:
             self.p.stdin.write(json.dumps(req, ensure_ascii=False) + "\n")
             self.p.stdin.flush()
-            line = self.p.stdout.readline()
-        except BrokenPipeError:
-            line = ""
+        except BrokenPipeError:   # receive says why
+            pass
+
+    def receive(self) -> dict:
+        line = self.p.stdout.readline()
         if not line:
             self.p.wait(10)
             self.err.seek(0)
