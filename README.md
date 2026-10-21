@@ -257,6 +257,49 @@ last run is four weeks old, it runs the top 1,000 again with the latest of each.
 the run before. To get the same summary locally, run `python -m tokcpu report results.json --previous
 old.json`.
 
+### llama.cpp and GGUF
+
+llama.cpp, and what is built on it (Ollama, LM Studio, llama-cpp-python), never reads tokenizer.json. A
+converter copies the vocabulary into the GGUF file once, along with a guess at which pre-tokenizer it
+needs, and llama.cpp's own code does the rest. `python -m tokcpu gguf` (`tokcpu/gguf.py`) checks the
+most-downloaded GGUF repos against the models they were made from, using each repo's
+`base_model:quantized:` tag. It runs on the same 42 texts with the same two Python references. It reads
+only the start of each GGUF (the header holds the vocabulary, about 8 MB for Llama 3.2) and runs it in an
+installed llama.cpp through a small C helper (`fuzz/llama_tok.c`, built on first use; `brew install
+llama.cpp`).
+
+```
+python -m tokcpu gguf bartowski/Qwen2.5-32B-Instruct-GGUF     # one repo, printed
+python -m tokcpu gguf --top 300 --out build/gguf/results.json  # the campaign; `report` reads it too
+```
+
+In October 2026, with llama.cpp 0.7.0, 192 of the top 300 GGUF repos could be checked. The rest:
+
+- 24 name no base model;
+- 37 are not language models (image, audio, speech);
+- 22 have a base model without a tokenizer.json;
+- 13 have an architecture this llama.cpp cannot run;
+- 10 are gated.
+
+Only 13 of the 192 matched Python on every text (Hunyuan, Spark, Granite 4.2, DeepSeek V4 builds). Each
+difference below was put down to a cause by testing it where possible. For example, a difference counts
+as "normalizer not applied" only if Python with the normalizer removed gives llama.cpp's exact ids.
+
+| Cause | GGUF repos | What happens |
+|---|---|---|
+| Normalizer not applied | 130 | Qwen 2 to 3.x ask for NFC; llama.cpp skips it, so a decomposed "é" (e + U+0301) tokenizes as two characters. Only decomposed text shows it (macOS file names, some pasted text), and 92 repos differ in nothing else |
+| Special-looking text | 33 | In Qwen 2 and 3 (the `qwen2` pre-tokenizer), llama.cpp turns a literal `</s>` in the text into a control token when it parses special tokens, as llama-server does for prompts. The GGUF and Python both have it as an ordinary token |
+| BOS | 26 | llama.cpp adds `<bos>` where tokenizer.json does not: 24 Gemma 4 repos (whose chat template writes `<bos>` itself), LFM2.5-Audio and a MiniCPM5 |
+| Decode clean-up | 13 | GLM, LFM2.5, Granite 4.1, Nemotron: llama.cpp decodes `a !== null` as `a!== null`, the old `clean_up_tokenization_spaces`, which 12 of these 13 models turn off |
+| Hindi and Thai | 10 | Qwen 3.5, gpt-oss, Llama 4, Nemotron: a virama or vowel sign lands in a different piece (स्त against स + ्त) |
+| `\r\n` | 4 | Laguna: one token in Python, two in llama.cpp |
+| BERT embeddings | 2 | nomic-embed-text-v1.5 and mxbai-embed-large: decode adds a leading space, a word over 100 characters is split instead of becoming `[UNK]`, and Korean and Hindi accents are stripped differently |
+
+On everyday text, 46 differ, nearly all for three of those reasons: the extra BOS, the space clean-up and
+Laguna's `\r\n`, plus the two BERT models. Beyond that, a umt5 text encoder differs in many places, but image
+pipelines that load it do their own tokenizing. llama.cpp also aborts, rather than returning an error, when
+asked to tokenize with a GGUF whose vocabulary type is `none` (an LFM2.5-Audio tokenizer file).
+
 ## Checking it
 
 `python -m pytest tests` (about a minute; CI runs it on every push):
@@ -305,8 +348,10 @@ tokcpu/bf.py          rungs 2 and 3: the Brainfuck compiler, the universal inter
 tokcpu/blocks.py      parallel ticks: a block cellular automaton, and the sorter
 tokcpu/fuzz.py        differential fuzzing of tokenizer runtimes, with the machine as oracle
 tokcpu/compat.py      the same runtimes against Python on real Hub tokenizers, and the report
+tokcpu/gguf.py        llama.cpp against Python on Hub GGUFs, from their headers alone
 .github/workflows/    the tests on every push; compat.yml, the top 1,000 again on each new release
-fuzz/                 the JavaScript runtimes for the fuzzer (runtimes.mjs) and compat (compat.mjs), pinned
+fuzz/                 the JavaScript runtimes for the fuzzer (runtimes.mjs) and compat (compat.mjs), pinned;
+                      llama_tok.c, llama.cpp's tokenizer for gguf
 tokcpu/__main__.py    build, run, and stage the Hub repo
 tokcpu/hub_card.md    the Hub repo's model card
 programs/             hello, alphabet, grid, jumps, and reverse (reads input)

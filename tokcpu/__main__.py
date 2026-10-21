@@ -10,6 +10,7 @@
     python -m tokcpu check MODEL [MODEL...]        does a Hub tokenizer (or a local folder) give the same ids in JavaScript?
     python -m tokcpu compat --top 1000             ...for the most-downloaded models, as one JSON
     python -m tokcpu report RESULTS [--previous OLD]   that JSON in Markdown, and what changed since OLD
+    python -m tokcpu gguf --top 300                does llama.cpp tokenize Hub GGUFs like their base models?
 
 A run ticks `decode(encode(tape))` until the tape stops changing, or until it repeats every two ticks
 (a block automaton that has settled, see blocks.py). Nothing else touches the tape.
@@ -107,6 +108,10 @@ def main(argv=None) -> int:
     k.add_argument("--top", type=int, default=1000)
     k.add_argument("--out", default=str(ROOT / "build" / "compat" / "results.json"))
     k.add_argument("--node", default="node", help="the node binary for the JavaScript runtimes")
+    g = sub.add_parser("gguf", help="compare Hub GGUFs' tokenizers in llama.cpp with their base models'")
+    g.add_argument("repos", nargs="*", help="GGUF repos to check and print (default: the --top most downloaded)")
+    g.add_argument("--top", type=int, default=300)
+    g.add_argument("--out", default=str(ROOT / "build" / "gguf" / "results.json"))
     p = sub.add_parser("report", help="summarise compat's results in Markdown")
     p.add_argument("results")
     p.add_argument("--previous", help="an earlier results file: list the models that changed since")
@@ -125,6 +130,12 @@ def main(argv=None) -> int:
     if a.cmd == "compat":
         from .compat import compat
         compat(a.top, Path(a.out), a.node)
+        return 0
+    if a.cmd == "gguf":
+        from . import gguf
+        if a.repos:
+            return gguf.check(a.repos)
+        gguf.campaign(a.top, Path(a.out))
         return 0
     if a.cmd == "report":
         from .compat import summary, tables

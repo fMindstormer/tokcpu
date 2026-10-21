@@ -4,6 +4,7 @@ Brainfuck output against a plain interpreter."""
 import json
 import random
 import shutil
+import struct
 import subprocess
 from pathlib import Path
 
@@ -257,3 +258,21 @@ def test_compat_finds_final_sigma(tmp_path):
     assert "| final sigma (toLowerCase) | 1 | 1 | 1 |" in text
     assert text.count("1 now differ:") == 3 and "- a/model (final sigma (toLowerCase))" in text
     assert compat.summary(before, data).count("1 now match:") == 3
+
+
+def test_gguf_header_is_cut_before_the_tensors():
+    """`gguf` keeps a GGUF's header with no tensors, reading only as far as its keys and values go."""
+    from tokcpu.gguf import read_header
+    s = lambda x: struct.pack("<Q", len(x.encode())) + x.encode()
+    kvs = [s("general.alignment") + struct.pack("<II", 4, 32),
+           s("tokenizer.ggml.model") + struct.pack("<I", 8) + s("gpt2"),
+           s("tokenizer.ggml.tokens") + struct.pack("<IIQ", 9, 8, 3) + s("a") + s("b") + s("ab"),
+           s("tokenizer.ggml.token_type") + struct.pack("<IIQ", 9, 5, 20) + struct.pack("<20i", *[1] * 20),
+           s("tokenizer.ggml.add_bos_token") + struct.pack("<I?", 7, True)]
+    head = struct.pack("<4sIQQ", b"GGUF", 3, 2, len(kvs)) + b"".join(kvs)
+    data = head + b"tensor infos and weights" * 1000
+    out, meta = read_header(lambda start, end: data[start:end])
+    assert meta == {"general.alignment": 32, "tokenizer.ggml.model": "gpt2", "tokenizer.ggml.tokens": ["a", "b", "ab"],
+                    "tokenizer.ggml.token_type": "[20 items]", "tokenizer.ggml.add_bos_token": True}
+    assert out[:len(head)] == head[:8] + struct.pack("<Q", 0) + head[16:]
+    assert len(out) % 32 == 0 and set(out[len(head):]) <= {0}

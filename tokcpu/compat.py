@@ -433,10 +433,14 @@ def same_versions(v: dict) -> tuple:
 def short(rt: str) -> str:
     """A runtime's column in the tables, the same across its minor releases: "transformers.js@4.3.1" -> "tj4"."""
     name, version = rt.rsplit("@", 1)
-    return f"tj{version.split('.')[0]}" if name == "transformers.js" else "tokenizers_js"
+    if name == "transformers.js":
+        return f"tj{version.split('.')[0]}"
+    return {"@huggingface/tokenizers": "tokenizers_js", "llama.cpp": "llama_cpp"}.get(name, name)
 
 
-def _cause(text_name: str, diff: dict) -> str:
+def _cause(text_name: str, diff: dict, js: bool = True) -> str:
+    if not js:   # gguf's causes, tested when it ran
+        return diff.get("cause") or "other"
     if "error" in diff:
         return "throws on " + diff["kind"] + ("" if "empty" not in diff["error"] else " of no ids")
     if diff["kind"] == "encode":   # again, so results saved by an older version get today's rules
@@ -447,6 +451,7 @@ def _cause(text_name: str, diff: dict) -> str:
 def tables(data: dict) -> dict[str, list[dict]]:
     """The results as flat tables for the dashboard: one row per model, and one per difference."""
     texts = data["texts"]
+    js = data.get("kind") != "gguf"
     models, diffs = [], []
     by_hash = {}
     for m in data["models"]:
@@ -478,14 +483,14 @@ def tables(data: dict) -> dict[str, list[dict]]:
             d = res.get("differences", {})
             real = {k: v for k, v in d.items() if v["verdict"] == "both"}
             row |= {col: "differs" if real else "same", f"{col}_texts": len(real), f"{col}_disputed": len(d) - len(real),
-                    f"{col}_causes": sorted({_cause(k, v) for k, v in real.items()})}
-            causes |= {_cause(k, v) for k, v in real.items()}
+                    f"{col}_causes": sorted({_cause(k, v, js) for k, v in real.items()})}
+            causes |= {_cause(k, v, js) for k, v in real.items()}
             if m["repo"] == by_hash[m["tokenizer"]][0]["repo"]:   # each tokenizer's differences once
                 for name, v in d.items():
                     diffs.append({"repo": m["repo"], "downloads": sum(x["downloads"] for x in by_hash[m["tokenizer"]]),
                                   "models": len(by_hash[m["tokenizer"]]), "runtime": col, "text": name,
                                   "group": texts[name]["group"], "kind": v["kind"],
-                                  "verdict": v["verdict"], "cause": _cause(name, v),
+                                  "verdict": v["verdict"], "cause": _cause(name, v, js),
                                   "python": json.dumps(v.get("python", v.get("error", "")), ensure_ascii=False)[:160],
                                   "js": json.dumps(v.get("js", ""), ensure_ascii=False)[:160]})
         row["causes"] = ", ".join(sorted(causes))
@@ -500,11 +505,14 @@ def summary(data: dict, previous: dict | None = None, most: int = 15) -> str:
     v, rows = data["versions"], [r for r in tables(data)["models"] if r["checked"]]
     cols = {short(rt): rt for rt in v["runtimes"]}
     listed = data["models"]
+    which = (f"Of the top {len(listed)} GGUF repos, {sum('tokenizer' in m for m in listed)} name a base model"
+             if data.get("kind") == "gguf" else
+             f"Of the top {len(listed)} models, {sum('tokenizer' in m for m in listed)} have a tokenizer.json "
+             f"({len(data['tokenizers'])} distinct files)")
     out = [f"# Tokenizer compatibility, {data['generated']}", "",
            f"`transformers` {v['transformers']} and `tokenizers` {v['tokenizers']} in Python against "
-           + ", ".join(f"`{rt}`" for rt in v["runtimes"]) + f" on Node {v['node']}. Of the top {len(listed)} models, "
-           f"{sum('tokenizer' in m for m in listed)} have a tokenizer.json ({len(data['tokenizers'])} distinct files); "
-           f"{len(rows)} were checked on {len(data['texts'])} texts.", ""]
+           + ", ".join(f"`{rt}`" for rt in v["runtimes"]) + (f" on Node {v['node']}" if v.get("node") else "")
+           + f". {which}; {len(rows)} were checked on {len(data['texts'])} texts.", ""]
     if v["json_parse_bug"]:
         out += ["**This Node has V8's JSON.parse bug (nodejs/node#63785); differences may be spurious.**", ""]
     out += ["| Runtime | Same | Differs | Cannot load | Same, by downloads |", "|---|---|---|---|---|"]
