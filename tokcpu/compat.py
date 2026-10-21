@@ -13,10 +13,14 @@ references disagree with each other, and the JavaScript runtimes side with the o
 
 `compat` does that for the most-downloaded models on the Hub, testing each distinct tokenizer.json once
 (by the Hub's file hash), deleting each download once it is checked, and writes one JSON of results. It
-saves as it goes and, run again, picks up where it stopped (the model list is kept next to the results).
+saves as it goes and, run again with the same versions, picks up where it stopped (the model list is kept
+next to the results). `report` summarises a results file in Markdown and, given an earlier one, says which
+models changed between them: .github/workflows/compat.yml runs both whenever a new release comes out.
 
     python -m tokcpu check openai/clip-vit-base-patch32 BAAI/bge-m3
+    python -m tokcpu check path/to/a/folder/with/tokenizer.json
     python -m tokcpu compat --top 1000 --out build/compat/results.json
+    python -m tokcpu report build/compat/results.json --previous old/results.json
 """
 
 from __future__ import annotations
@@ -80,9 +84,6 @@ TEXTS = {   # name -> (group, text)
     "repeats": ("stress", "!!!!!!!!!!" * 6 + " " + "\n" * 12 + "ha" * 40),
     "single-space": ("stress", " "),
 }
-RUNTIMES = ["transformers.js@3.7.6", "transformers.js@4.3.1", "@huggingface/tokenizers@0.2.0"]
-
-
 class Js:
     """fuzz/compat.mjs, the JavaScript runtimes."""
 
@@ -183,7 +184,7 @@ def check_dir(d: Path, js: Js) -> dict:
         return out | {"error": f"node could not read it: {load.get('error')}"}
     enc = js.ask(op="encode", texts=texts)
     dec = {k: js.ask(op="decode", ids=want[k]) for k in ok}
-    for rt in RUNTIMES:
+    for rt in load["runtimes"]:
         if rt in load["errors"]:
             out["runtimes"][rt] = {"load_error": load["errors"][rt]}
             continue
@@ -261,7 +262,7 @@ def versions(js: Js) -> dict:
     v = js.ask(op="versions")
     return {"transformers": transformers.__version__, "tokenizers": tokenizers.__version__,
             "node": v["node"], "v8": v["v8"],
-            "json_parse_bug": v["jsonParseBug"], "runtimes": RUNTIMES}
+            "json_parse_bug": v["jsonParseBug"], "runtimes": v["runtimes"]}
 
 
 def warn_v8(v: dict, log=print):
@@ -276,7 +277,7 @@ def check(repos: list[str], node: str = "node", log=print) -> int:
     bad = 0
     for repo in repos:
         with tempfile.TemporaryDirectory() as tmp:
-            d = download(repo, Path(tmp))
+            d = Path(repo) if (Path(repo) / "tokenizer.json").exists() else download(repo, Path(tmp))
             if isinstance(d, str):
                 log(f"{repo}: skipped ({d})")
                 continue
@@ -349,13 +350,17 @@ def compat(top: int, out: Path, node: str = "node", log=log_now) -> dict:
     for m in models:
         if "tokenizer" in m:
             distinct.setdefault(m["tokenizer"], m["repo"])
-    results = json.loads(out.read_text())["tokenizers"] if out.exists() else {}
-    results = {h: r for h, r in results.items() if not str(r.get("error", "")).startswith("download failed")}
-    log(f"{len(models)} models; {sum('tokenizer' in m for m in models)} have a tokenizer.json; "
-        f"{len(distinct)} distinct files; {len(results)} already checked")
     js = Js(node)
     v = versions(js)
     warn_v8(v, log)
+    old = json.loads(out.read_text()) if out.exists() else None
+    results = {}
+    if old and same_versions(old["versions"]) == same_versions(v):
+        results = {h: r for h, r in old["tokenizers"].items() if not str(r.get("error", "")).startswith("download failed")}
+    elif old:
+        log(f"{out} was made with other versions; starting again")
+    log(f"{len(models)} models; {sum('tokenizer' in m for m in models)} have a tokenizer.json; "
+        f"{len(distinct)} distinct files; {len(results)} already checked")
 
     def save():
         data = {"generated": time.strftime("%Y-%m-%d"), "versions": v,
@@ -383,7 +388,15 @@ def compat(top: int, out: Path, node: str = "node", log=log_now) -> dict:
     return save()
 
 
-SHORT = {"transformers.js@3.7.6": "tj3", "transformers.js@4.3.1": "tj4", "@huggingface/tokenizers@0.2.0": "tokenizers_js"}
+def same_versions(v: dict) -> tuple:
+    """What has to match for one run to continue another."""
+    return v["transformers"], v["tokenizers"], v["node"], tuple(v["runtimes"])
+
+
+def short(rt: str) -> str:
+    """A runtime's column in the tables, the same across its minor releases: "transformers.js@4.3.1" -> "tj4"."""
+    name, version = rt.rsplit("@", 1)
+    return f"tj{version.split('.')[0]}" if name == "transformers.js" else "tokenizers_js"
 
 
 def _cause(text_name: str, diff: dict) -> str:
@@ -418,20 +431,22 @@ def tables(data: dict) -> dict[str, list[dict]]:
                 "pre_tokenizer": r["model"]["pre_tokenizer"] or "", "decoder": r["model"]["decoder"] or "",
                 "transformers_loads": refs.get("transformers") == "ok"}
         causes = set()
-        for rt, short in SHORT.items():
+        for rt in data["versions"]["runtimes"]:
+            col = short(rt)
             res = r["runtimes"].get(rt, {})
             if "load_error" in res:
-                row |= {f"{short}": "cannot load", f"{short}_texts": None, f"{short}_disputed": None}
+                row |= {col: "cannot load", f"{col}_texts": None, f"{col}_disputed": None}
                 causes.add("cannot load")
                 continue
             d = res.get("differences", {})
             real = {k: v for k, v in d.items() if v["verdict"] == "both"}
-            row |= {short: "differs" if real else "same", f"{short}_texts": len(real), f"{short}_disputed": len(d) - len(real)}
+            row |= {col: "differs" if real else "same", f"{col}_texts": len(real), f"{col}_disputed": len(d) - len(real),
+                    f"{col}_causes": sorted({_cause(k, v) for k, v in real.items()})}
             causes |= {_cause(k, v) for k, v in real.items()}
             if m["repo"] == by_hash[m["tokenizer"]][0]["repo"]:   # each tokenizer's differences once
                 for name, v in d.items():
                     diffs.append({"repo": m["repo"], "downloads": sum(x["downloads"] for x in by_hash[m["tokenizer"]]),
-                                  "models": len(by_hash[m["tokenizer"]]), "runtime": short, "text": name,
+                                  "models": len(by_hash[m["tokenizer"]]), "runtime": col, "text": name,
                                   "group": texts[name]["group"], "kind": v["kind"],
                                   "verdict": v["verdict"], "cause": _cause(name, v),
                                   "python": json.dumps(v.get("python", v.get("error", "")), ensure_ascii=False)[:160],
@@ -440,3 +455,67 @@ def tables(data: dict) -> dict[str, list[dict]]:
         models.append(row)
     return {"models": models, "differences": diffs,
             "texts": [{"text": k, "group": v["group"], "content": v["text"]} for k, v in texts.items()]}
+
+
+def summary(data: dict, previous: dict | None = None, most: int = 15) -> str:
+    """The results in Markdown: per runtime, how many models match Python and why the others don't; and,
+    given an earlier results file, which models changed between the two (among models both checked)."""
+    v, rows = data["versions"], [r for r in tables(data)["models"] if r["checked"]]
+    cols = {short(rt): rt for rt in v["runtimes"]}
+    listed = data["models"]
+    out = [f"# Tokenizer compatibility, {data['generated']}", "",
+           f"`transformers` {v['transformers']} and `tokenizers` {v['tokenizers']} in Python against "
+           + ", ".join(f"`{rt}`" for rt in v["runtimes"]) + f" on Node {v['node']}. Of the top {len(listed)} models, "
+           f"{sum('tokenizer' in m for m in listed)} have a tokenizer.json ({len(data['tokenizers'])} distinct files); "
+           f"{len(rows)} were checked on {len(data['texts'])} texts.", ""]
+    if v["json_parse_bug"]:
+        out += ["**This Node has V8's JSON.parse bug (nodejs/node#63785); differences may be spurious.**", ""]
+    out += ["| Runtime | Same | Differs | Cannot load | Same, by downloads |", "|---|---|---|---|---|"]
+    total = sum(r["downloads"] for r in rows) or 1
+    for col, rt in cols.items():
+        n = lambda s: sum(r.get(col) == s for r in rows)
+        same = sum(r["downloads"] for r in rows if r.get(col) == "same") / total
+        out.append(f"| {rt} | {n('same')} | {n('differs')} | {n('cannot load')} | {same:.1%} |")
+    causes = sorted({c for r in rows for col in cols for c in r.get(f"{col}_causes") or []}
+                    | ({"cannot load"} if any(r.get(col) == "cannot load" for r in rows for col in cols) else set()))
+    out += ["", "Models affected, by cause:", "", "| Cause | " + " | ".join(cols) + " |", "|---|" + "---|" * len(cols)]
+    for c in causes:
+        out.append(f"| {c} | " + " | ".join(str(sum(_has(r, col, c) for r in rows)) for col in cols) + " |")
+    if previous is None:
+        return "\n".join(out) + "\n"
+
+    pv = previous["versions"]
+    was = {r["repo"]: r for r in tables(previous)["models"] if r["checked"]}
+    changed = [f"`{k}` {pv[k]} → {v[k]}" for k in ("transformers", "tokenizers", "node") if pv[k] != v[k]]
+    changed += [f"`{rt}` → `{cols[short(rt)]}`" if short(rt) in cols else f"`{rt}` dropped" for rt in pv["runtimes"]
+                if rt not in v["runtimes"]]
+    out += ["", f"## Since {previous['generated']}", "",
+            ("Changed: " + "; ".join(changed) + "." if changed else "The same versions as before.")
+            + f" {sum(r['repo'] in was for r in rows)} models were checked both times.", ""]
+    for col in cols:
+        moves = {"now match": [], "now differ": [], "differ for other reasons": []}
+        for r in sorted(rows, key=lambda r: -r["downloads"]):
+            w = was.get(r["repo"])
+            if w is None or col not in w:
+                continue
+            now, then = r.get(col), w.get(col)
+            if now == "same" and then != "same":
+                moves["now match"].append(f"{r['repo']} (was: {_list(w.get(f'{col}_causes')) or then})")
+            elif now != "same" and then == "same":
+                moves["now differ"].append(f"{r['repo']} ({_list(r.get(f'{col}_causes')) or now})")
+            elif now == then == "differs" and r[f"{col}_causes"] != w[f"{col}_causes"]:
+                moves["differ for other reasons"].append(f"{r['repo']} ({_list(w[f'{col}_causes'])} → {_list(r[f'{col}_causes'])})")
+        out.append(f"**{cols[col]}**: " + ("; ".join(f"{len(m)} {what}" for what, m in moves.items() if m) or "no change") + ".")
+        for what, m in moves.items():
+            if m:
+                out += ["", f"{len(m)} {what}:", ""] + [f"- {x}" for x in m[:most]] + ([f"- and {len(m) - most} more"] if len(m) > most else [])
+        out.append("")
+    return "\n".join(out).rstrip() + "\n"
+
+
+def _list(causes: list[str] | None) -> str:
+    return "; ".join(causes or [])
+
+
+def _has(row: dict, col: str, cause: str) -> bool:
+    return row.get(col) == "cannot load" if cause == "cannot load" else cause in (row.get(f"{col}_causes") or [])

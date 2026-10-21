@@ -238,8 +238,22 @@ def test_compat_finds_final_sigma(tmp_path):
         js.close()
         compat.TEXTS = old
     assert r["references"] == {"tokenizers": "ok", "transformers": "ok"}
-    for rt in compat.RUNTIMES:
+    assert len(r["runtimes"]) == 3
+    for rt in r["runtimes"]:
         diffs = r["runtimes"][rt]["differences"]
         assert set(diffs) == {"greek"}, rt
         assert diffs["greek"]["verdict"] == "both" and diffs["greek"]["cause"] == "final sigma (toLowerCase)"
         assert diffs["greek"]["python"] == ["σοφοσ"] and diffs["greek"]["js"] == ["σοφος"]
+
+    # `report`, against an earlier run in which every runtime matched
+    data = {"generated": "2026-10-20", "texts": {"greek": {"group": "languages", "text": "ΣΟΦΟΣ"}},
+            "versions": {"transformers": "5", "tokenizers": "0.23", "node": "v22", "json_parse_bug": False, "runtimes": list(r["runtimes"])},
+            "models": [{"repo": "a/model", "downloads": 10, "pipeline": None, "library": None, "tokenizer": "h"}],
+            "tokenizers": {"h": r}}
+    before = json.loads(json.dumps(data)) | {"generated": "2026-10-01"}
+    for res in before["tokenizers"]["h"]["runtimes"].values():
+        res["differences"] = {}
+    text = compat.summary(data, before)
+    assert "| final sigma (toLowerCase) | 1 | 1 | 1 |" in text
+    assert text.count("1 now differ:") == 3 and "- a/model (final sigma (toLowerCase))" in text
+    assert compat.summary(before, data).count("1 now match:") == 3

@@ -238,6 +238,25 @@ also drops the leading `▁` of Metaspace tokenizers with `prepend_scheme: "firs
 The results are on a [dashboard](https://claude.ai/artifact/CnCFwFeqHXPsNTKdyuod3d), and `--out` keeps them
 as JSON. The run takes about an hour, mostly waiting on the Hub's rate limit, and resumes where it stopped.
 
+**Your own tokenizer.** Before you ship a tokenizer to the browser, check it (after `cd fuzz && npm
+install`, on Node 22):
+
+```
+python -m tokcpu check your-name/your-model          # a Hub repo; private ones need `hf auth login`
+python -m tokcpu check path/to/folder                # or a folder holding tokenizer.json
+```
+
+For each runtime, it lists every text where the ids or the decoded text differ from Python, with the
+tokens around the first difference and a guess at the cause. It exits with 1 when a runtime differs from
+both Python references or cannot load the tokenizer, so it can run in CI.
+
+**New releases.** [`.github/workflows/compat.yml`](.github/workflows/compat.yml) checks every day for a
+new release of transformers.js, tokenizers.js, `transformers` or `tokenizers`. When there is one, or the
+last run is four weeks old, it runs the top 1,000 again with the latest of each. The results go on the
+[`compat-results`](../../tree/compat-results) branch, and its README lists the models that changed since
+the run before. To get the same summary locally, run `python -m tokcpu report results.json --previous
+old.json`.
+
 ## Checking it
 
 `python -m pytest tests` (about a minute; CI runs it on every push):
@@ -285,7 +304,8 @@ tokcpu/small.py       rung 1: a binary counter, the 4-state busy beaver, any Tur
 tokcpu/bf.py          rungs 2 and 3: the Brainfuck compiler, the universal interpreter, a reference interpreter
 tokcpu/blocks.py      parallel ticks: a block cellular automaton, and the sorter
 tokcpu/fuzz.py        differential fuzzing of tokenizer runtimes, with the machine as oracle
-tokcpu/compat.py      the same runtimes against Python on real Hub tokenizers
+tokcpu/compat.py      the same runtimes against Python on real Hub tokenizers, and the report
+.github/workflows/    the tests on every push; compat.yml, the top 1,000 again on each new release
 fuzz/                 the JavaScript runtimes for the fuzzer (runtimes.mjs) and compat (compat.mjs), pinned
 tokcpu/__main__.py    build, run, and stage the Hub repo
 tokcpu/hub_card.md    the Hub repo's model card

@@ -7,8 +7,9 @@
     python -m tokcpu run tokenizers/hello --auto   (through transformers' AutoTokenizer)
     python -m tokcpu hub USER/tokcpu [--push]      stage (and upload) the Hugging Face Hub repo
     python -m tokcpu fuzz --cases 200              differential fuzzing of tokenizer runtimes
-    python -m tokcpu check MODEL [MODEL...]        does a Hub tokenizer give the same ids in JavaScript?
+    python -m tokcpu check MODEL [MODEL...]        does a Hub tokenizer (or a local folder) give the same ids in JavaScript?
     python -m tokcpu compat --top 1000             ...for the most-downloaded models, as one JSON
+    python -m tokcpu report RESULTS [--previous OLD]   that JSON in Markdown, and what changed since OLD
 
 A run ticks `decode(encode(tape))` until the tape stops changing, or until it repeats every two ticks
 (a block automaton that has settled, see blocks.py). Nothing else touches the tape.
@@ -100,12 +101,16 @@ def main(argv=None) -> int:
     f.add_argument("--out", default=str(ROOT / "build" / "fuzz"))
     f.add_argument("--node", default="node", help="the node binary for the JavaScript runtimes")
     c = sub.add_parser("check", help="compare a Hub model's tokenizer in Python and in JavaScript")
-    c.add_argument("repos", nargs="+")
+    c.add_argument("repos", nargs="+", help="Hub repos, or folders holding a tokenizer.json")
     c.add_argument("--node", default="node", help="the node binary for the JavaScript runtimes")
     k = sub.add_parser("compat", help="check the most-downloaded models' tokenizers")
     k.add_argument("--top", type=int, default=1000)
     k.add_argument("--out", default=str(ROOT / "build" / "compat" / "results.json"))
     k.add_argument("--node", default="node", help="the node binary for the JavaScript runtimes")
+    p = sub.add_parser("report", help="summarise compat's results in Markdown")
+    p.add_argument("results")
+    p.add_argument("--previous", help="an earlier results file: list the models that changed since")
+    p.add_argument("--tables", help="also write the dashboard's tables (models, differences, texts) here as JSON")
     a = ap.parse_args(argv)
 
     if a.cmd == "build":
@@ -120,6 +125,16 @@ def main(argv=None) -> int:
     if a.cmd == "compat":
         from .compat import compat
         compat(a.top, Path(a.out), a.node)
+        return 0
+    if a.cmd == "report":
+        from .compat import summary, tables
+        data = json.loads(Path(a.results).read_text())
+        old = json.loads(Path(a.previous).read_text()) if a.previous and Path(a.previous).exists() else None
+        print(summary(data, old), end="")
+        if a.tables:
+            Path(a.tables).mkdir(parents=True, exist_ok=True)
+            for name, rows in tables(data).items():
+                (Path(a.tables) / f"{name}.json").write_text(json.dumps(rows, ensure_ascii=False))
         return 0
     if a.cmd == "fuzz":
         from .fuzz import fuzz

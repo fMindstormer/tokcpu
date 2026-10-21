@@ -1,0 +1,87 @@
+name: compat
+# Checks the most-downloaded Hub tokenizers in JavaScript against Python (python -m tokcpu compat) whenever
+# transformers.js, tokenizers.js, transformers or tokenizers has a new release, or the last run is four
+# weeks old. Each run's results, and what changed since the run before, go on the compat-results branch;
+# its README is the summary.
+on:
+  schedule:
+    - cron: "23 5 * * *"
+  workflow_dispatch:
+    inputs:
+      top:
+        description: How many of the most-downloaded models
+        default: "1000"
+      publish:
+        description: Commit the results to the compat-results branch
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency: compat
+
+jobs:
+  compat:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22      # Node 24's V8 has a JSON.parse bug that corrupts tokenizers (nodejs/node#63785)
+      - name: Install the latest releases
+        run: |
+          pip install -U transformers tokenizers huggingface_hub sentencepiece protobuf tiktoken
+          npm ci
+          npm install --no-save tj4@npm:@huggingface/transformers@latest @huggingface/tokenizers@latest
+        working-directory: fuzz
+      - name: Fetch the last results
+        run: |
+          if git fetch -q --depth 1 origin compat-results; then
+            git worktree add -q results FETCH_HEAD
+          else
+            git worktree add -q --orphan results
+          fi
+      - name: Is anything new?
+        id: new
+        run: |
+          python - <<'EOF'
+          import json, os, time
+          from pathlib import Path
+          from tokcpu.compat import Js, versions
+          js = Js()
+          v = versions(js)
+          js.close()
+          key = lambda v: (v["transformers"], v["tokenizers"], v["runtimes"])
+          last = Path("results/results.json")
+          old = json.loads(last.read_text()) if last.exists() else None
+          stale = old is None or time.time() - time.mktime(time.strptime(old["generated"], "%Y-%m-%d")) > 28 * 86400
+          new = old is None or key(old["versions"]) != key(v)
+          print("now:", key(v), "\nlast:", old and key(old["versions"]), old and old["generated"])
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"run={str(new or stale or os.environ['GITHUB_EVENT_NAME'] == 'workflow_dispatch').lower()}\n")
+          EOF
+      - name: Check the top models
+        if: steps.new.outputs.run == 'true'
+        env:
+          TOP: ${{ inputs.top || '1000' }}
+          TOKEN: ${{ secrets.HF_TOKEN }}   # optional; without it, the Hub's rate limit makes the run slower
+        run: |
+          if [ -n "$TOKEN" ]; then export HF_TOKEN="$TOKEN"; fi
+          python -m tokcpu compat --top "$TOP" --out out/results.json
+          python -m tokcpu report out/results.json --previous results/results.json --tables out/tables > out/README.md
+          cat out/README.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Commit the results
+        if: steps.new.outputs.run == 'true' && (github.event_name == 'schedule' || inputs.publish)
+        run: |
+          rm -rf results/tables
+          cp -r out/README.md out/results.json out/results-models.json out/tables results/
+          cd results
+          git add -A
+          git -c user.name="github-actions[bot]" -c user.email="41898299+github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "Compat results, $(date -u +%F)"
+          git push -q origin HEAD:compat-results
