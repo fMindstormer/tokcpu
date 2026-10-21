@@ -88,13 +88,22 @@ class Js:
     """fuzz/compat.mjs, the JavaScript runtimes."""
 
     def __init__(self, node: str = "node"):
+        self.err = tempfile.TemporaryFile()
         self.p = subprocess.Popen([node, str(ROOT / "fuzz" / "compat.mjs")], cwd=ROOT / "fuzz", text=True, encoding="utf-8",
-                                  stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+                                  stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=self.err)
 
     def ask(self, **req):
-        self.p.stdin.write(json.dumps(req, ensure_ascii=False) + "\n")
-        self.p.stdin.flush()
-        return json.loads(self.p.stdout.readline())
+        try:
+            self.p.stdin.write(json.dumps(req, ensure_ascii=False) + "\n")
+            self.p.stdin.flush()
+            line = self.p.stdout.readline()
+        except BrokenPipeError:
+            line = ""
+        if not line:
+            self.p.wait(10)
+            self.err.seek(0)
+            raise RuntimeError(f"fuzz/compat.mjs exited ({self.p.returncode}): {self.err.read().decode(errors='replace')[-2000:]}")
+        return json.loads(line)
 
     def close(self):
         try:
@@ -102,6 +111,7 @@ class Js:
             self.p.wait(10)
         except Exception:   # it died, or hangs
             self.p.kill()
+        self.err.close()
 
 
 def first_difference(a: list, b: list) -> int:
