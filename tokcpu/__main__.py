@@ -11,6 +11,7 @@
     python -m tokcpu compat --top 1000             ...for the most-downloaded models, as one JSON
     python -m tokcpu report RESULTS [--previous OLD]   that JSON in Markdown, and what changed since OLD
     python -m tokcpu gguf --top 300                does llama.cpp tokenize Hub GGUFs like their base models?
+    python -m tokcpu effect                        does a disagreement (final sigma) change embeddings and retrieval?
 
 A run ticks `decode(encode(tape))` until the tape stops changing, or until it repeats every two ticks
 (a block automaton that has settled, see blocks.py). Nothing else touches the tape.
@@ -112,6 +113,9 @@ def main(argv=None) -> int:
     g.add_argument("repos", nargs="*", help="GGUF repos to check and print (default: the --top most downloaded)")
     g.add_argument("--top", type=int, default=300)
     g.add_argument("--out", default=str(ROOT / "build" / "gguf" / "results.json"))
+    e = sub.add_parser("effect", help="feed Python's and transformers.js's ids for Greek text to the same models")
+    e.add_argument("--out", default=str(ROOT / "effect"))
+    e.add_argument("--node", default="node", help="the node binary, if the pairs need building")
     p = sub.add_parser("report", help="summarise compat's results in Markdown")
     p.add_argument("results")
     p.add_argument("--previous", help="an earlier results file: list the models that changed since")
@@ -136,6 +140,11 @@ def main(argv=None) -> int:
         if a.repos:
             return gguf.check(a.repos)
         gguf.campaign(a.top, Path(a.out))
+        return 0
+    if a.cmd == "effect":
+        from .effect import effect
+        effect(Path(a.out), a.node)
+        print((Path(a.out) / "summary.md").read_text(), end="")
         return 0
     if a.cmd == "report":
         from .compat import summary, tables

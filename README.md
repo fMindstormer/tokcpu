@@ -299,6 +299,83 @@ Laguna's `\r\n`, plus the two BERT models. Beyond that, a umt5 text encoder diff
 pipelines that load it do their own tokenizing. llama.cpp also aborts, rather than returning an error, when
 asked to tokenize with a GGUF whose vocabulary type is `none` (an LFM2.5-Audio tokenizer file).
 
+## Does a disagreement change what the model does?
+
+A different id only matters if the model then does something different. `python -m tokcpu effect`
+(`tokcpu/effect.py`) measures this for the most common difference above, final sigma, in three affected
+models:
+
+- all-MiniLM-L6-v2 and bge-small-en-v1.5, two of the embedding models most often run in the browser;
+- bert-base-multilingual-uncased, an uncased BERT that was trained on Greek.
+
+Each Greek text is tokenized by Python and by transformers.js 4.3.1. Both id sequences then go through the
+same model, weights and PyTorch code, so the tokenizer is the only difference. The texts come from two
+sources:
+
+- [Belebele](https://huggingface.co/datasets/facebook/belebele): 900 Greek questions on 488 passages of
+  edited prose, as written and in capitals, as in a headline, a sign or a search typed with caps lock;
+- [FineWeb-2](https://huggingface.co/datasets/HuggingFaceFW/fineweb-2): 5,000 Greek web pages, as found.
+
+![Embedding drift and retrieval changes from the final-sigma difference](effect/figure.svg)
+
+**How often.**
+
+- In edited prose the ids almost never differ: 1 passage and 1 question in Belebele, both because of the
+  acronym ΠΕΣ.
+- On the web they differ often. 788 of the 5,000 pages (16%) have different ids somewhere, from headlines,
+  menus and names in capitals. Within the text a model actually reads, 329 pages differ for
+  all-MiniLM-L6-v2 (its first 256 tokens), 427 for bge (512 tokens) and 544 for mBERT (512 of its longer
+  Greek tokens).
+- Text in capitals differs almost every time: 671 of the 900 questions, and every passage.
+
+**How much.** Over the questions and passages in capitals, the median drift (1 − cosine between the two
+embeddings) is:
+
+| Model | Median drift | 90th percentile |
+|---|---|---|
+| all-MiniLM-L6-v2 | 0.012 | 0.030 |
+| bge-small-en-v1.5 | 0.004 | 0.014 |
+| mBERT | 0.030 | 0.078 |
+
+That is about the median gap between a question's first and second passage, or, for mBERT, ten times it.
+So rankings move. The table below uses questions in capitals and passages as written, with the passages
+embedded from Python's ids (an index built offline) and the questions from transformers.js's (a search box
+in the browser):
+
+| Model | Top passage changes | Top 10 changes | Gold passage first, Python | Gold passage first, transformers.js |
+|---|---|---|---|---|
+| all-MiniLM-L6-v2 | 12% of questions | 48% | 2.1% | 2.2% |
+| bge-small-en-v1.5 | 18% | 61% | 9.0% | 9.4% |
+| mBERT | 44% | 74% | 23.3% | 31.9% |
+
+For questions as written, the ranking changes for exactly one question. Panel B of the figure shows when a
+ranking changes: the more word-final Σ a question holds, the likelier its top passage changes. With one,
+7% (English models) to 37% (mBERT) of questions get a different top passage. With four or more, it is
+24% to 70%.
+
+**Which side is right.** The two English models barely retrieve Greek at all, so for them the difference
+reshuffles rankings without changing accuracy: the gold passage moves up about as often as down (353
+against 270 questions for all-MiniLM-L6-v2, 276 against 296 for bge). mBERT
+retrieves better with transformers.js's ids, and this is not an accident:
+
+- JavaScript lowercases by Unicode's rule, as Python's own `str.lower()` does, so a word in capitals comes
+  back with its ς. For 1,157 of the 1,159 Belebele texts in capitals whose ids differ, transformers.js gives
+  exactly the ids of the same text as written. Python's tokenizer never does.
+- The Rust library lowercases each character on its own, so an uncased model reading Python's ids sees σ
+  where the language has ς.
+- As a result, Python's accuracy falls from 31.9% to 23.3% when the question is typed in capitals, while
+  transformers.js's stays at 31.9%. In 416 questions the gold passage ranks higher with transformers.js's
+  ids, and in 105 lower.
+
+Here, the reference implementation is the one that hurts the model.
+
+The experiment needs `pip install torch matplotlib pyarrow`. It takes about 15 minutes on a laptop CPU and
+writes [`effect/summary.md`](effect/summary.md) and the figure. The paired dataset,
+[`effect/pairs.jsonl.gz`](effect/pairs.jsonl.gz), is in the repository, so the experiment does not need
+Node. Each row holds a text and, per model, Python's ids and transformers.js's ids where they differ, both
+cut to the first 512. A web page is kept under its FineWeb-2 id rather than its text, and only if its ids
+differ. Delete the file to build it again; that needs Node 22 and `cd fuzz && npm install`.
+
 ## Checking it
 
 `python -m pytest tests` (about a minute; CI runs it on every push):
@@ -348,6 +425,8 @@ tokcpu/blocks.py      parallel ticks: a block cellular automaton, and the sorter
 tokcpu/fuzz.py        differential fuzzing of tokenizer runtimes, with the machine as oracle
 tokcpu/compat.py      the same runtimes against Python on real Hub tokenizers, and the report
 tokcpu/gguf.py        llama.cpp against Python on Hub GGUFs, from their headers alone
+tokcpu/effect.py      does final sigma change embeddings and retrieval? (figure.py draws it)
+effect/               its paired dataset, summary and figure
 .github/workflows/    the tests on every push; compat.yml, the top 1,000 again on each new release; pages.yml,
                       web/ and the dashboard on GitHub Pages
 fuzz/                 the JavaScript runtimes for the fuzzer (runtimes.mjs) and compat (compat.mjs), pinned;

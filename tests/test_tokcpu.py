@@ -276,3 +276,19 @@ def test_gguf_header_is_cut_before_the_tensors():
                     "tokenizer.ggml.token_type": "[20 items]", "tokenizer.ggml.add_bos_token": True}
     assert out[:len(head)] == head[:8] + struct.pack("<Q", 0) + head[16:]
     assert len(out) % 32 == 0 and set(out[len(head):]) <= {0}
+
+
+def test_effect_pairs():
+    """`effect`'s paired dataset: ids differ only where a capital sigma ends a word, and are cut as models cut them."""
+    from tokcpu.effect import fit, read_pairs
+    assert fit([101, 1, 2, 3, 102], 4) == [101, 1, 2, 102] and fit([101, 1, 102], 4) == [101, 1, 102]
+    head, rows = read_pairs(ROOT / "effect" / "pairs.jsonl.gz")
+    belebele = [r for r in rows if r["source"] == "belebele"]
+    assert len(belebele) == 2 * (488 + 900)
+    for r in belebele:
+        for repo in head["models"]:
+            x = r["ids"][repo]
+            assert len(x["python"]) <= 512 and len(x.get("js", [])) <= 512
+            if "js" in x:   # only a text with a word-final Σ is lowercased differently
+                assert r["finals"] > 0
+    assert sum("js" in r["ids"][head["models"][0]] for r in belebele if r["variant"] == "as written") == 2
