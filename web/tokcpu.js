@@ -1,6 +1,7 @@
-// A Turing machine table -> tokenizer.json, in the browser. A port of turing() in tokcpu/small.py, the
-// Machine model in tokcpu/machine.py and spec() in tokcpu/compile.py; tests/js_compile.mjs checks that
-// it writes the same file as Python, byte for byte.
+// A Turing machine table, or an elementary cellular automaton -> tokenizer.json, in the browser. A port
+// of turing() in tokcpu/small.py, the Machine model in tokcpu/machine.py, automaton() in
+// tokcpu/elementary.py and spec() in tokcpu/compile.py; tests/js_compile.mjs checks that it writes the
+// same file as Python, byte for byte.
 
 export const LEFT = "⊢", RIGHT = "⊣";
 const CIRCLED = [];   // readable heads: an R-marker is a circled small letter, an L-marker the circled capital
@@ -72,7 +73,7 @@ export function turing(table, blank = "0") {
 }
 
 /** Like spec() in compile.py. */
-export function spec(chars, rules) {
+export function spec(chars, rules, preTokenizer = null) {
   const windows = [...rules.keys()].sort(byCode);
   const C = chars.length, M = windows.length;
   const vocab = {}, seen = new Map(), added = [];
@@ -87,7 +88,7 @@ export function spec(chars, rules) {
   return {
     version: "1.0", truncation: null, padding: null,
     added_tokens: added,
-    normalizer: null, pre_tokenizer: null, post_processor: null,
+    normalizer: null, pre_tokenizer: preTokenizer, post_processor: null,
     decoder: { type: "Sequence", decoders: [
       { type: "Replace", pattern: { Regex: TAG_CLASS }, content: "" },
       { type: "Fuse" }] },
@@ -95,6 +96,68 @@ export function spec(chars, rules) {
              end_of_word_suffix: null, fuse_unk: false, byte_fallback: false, ignore_merges: false,
              vocab, merges: windows.map((w) => [w[0], w[1]]) },
   };
+}
+
+// Elementary cellular automata as block automata, as in tokcpu/elementary.py: two ticks a generation.
+export const MARK = "◦", PLAIN = "·█", KNOWS_LEFT = "abcd", KNOWS_RIGHT = "efgh";
+export const ETHER = "11111000100110";
+export const COLLISION = "00110011001110001000010111111010001011111110101010011001";
+const SPLIT = { type: "Split", pattern: { Regex: ".." }, behavior: "Isolated", invert: false };
+const LEFTS = [], RIGHTS = [];
+for (let k = 0; k < 20; k++) { LEFTS.push(String.fromCharCode(0x2460 + k)); RIGHTS.push(String.fromCharCode(0x2474 + k)); }
+const mod = (a, n) => ((a % n) + n) % n;
+export const caTable = (number) => (l, v, r) => (number >> (4 * l + 2 * v + r)) & 1;
+
+/** Like edge() in elementary.py: [[near, far, next state], ...], the starting state first. */
+function edge(f, word, step) {
+  const p = word.length, gens = [], seen = new Map();
+  let row = Array.from(word, Number);
+  while (!seen.has(row.join(""))) {
+    seen.set(row.join(""), gens.length);
+    gens.push(row);
+    const r = row;
+    row = r.map((v, i) => f(r[mod(i - 1, p)], v, r[(i + 1) % p]));
+  }
+  const loop = seen.get(row.join(""));
+  const nxt = (t, x) => [t + 1 < gens.length ? t + 1 : loop, mod(x + step, p)];
+  const order = [], index = new Map();
+  let s = [0, step < 0 ? 0 : mod(-1, p)];
+  while (!index.has(s.join())) { index.set(s.join(), order.length); order.push(s); s = nxt(...s); }
+  return order.map(([t, x]) => [gens[t][mod(x + step, p)], gens[t][mod(x + 2 * step, p)], index.get(nxt(t, x).join())]);
+}
+
+/** Like automaton() in elementary.py: { chars, rules, start, preTokenizer }. */
+export function automaton(number, cells, left = "0", right = "0") {
+  if (!cells || cells.length % 2 || /[^01]/.test(cells + left + right) || !left || !right)
+    throw new Error("the cells are an even number of 0s and 1s, at least two, and each background at least one");
+  const f = caTable(number), L = edge(f, left, -1), R = edge(f, right, 1);
+  if (Math.max(L.length, R.length) > LEFTS.length)
+    throw new Error(`the background needs ${Math.max(L.length, R.length)} states at an edge; at most ${LEFTS.length} fit`);
+  const lefts = L.length === 1 ? [LEFT] : LEFTS.slice(0, L.length), rights = R.length === 1 ? [RIGHT] : RIGHTS.slice(0, R.length);
+  const rules = new Map();
+  for (const a of [0, 1]) for (const b of [0, 1]) {
+    rules.set(PLAIN[a] + PLAIN[b], KNOWS_RIGHT[2 * a + b] + KNOWS_LEFT[2 * a + b]);
+    for (const c of [0, 1]) for (const d of [0, 1])
+      rules.set(KNOWS_LEFT[2 * a + b] + KNOWS_RIGHT[2 * c + d], PLAIN[f(a, b, c)] + PLAIN[f(b, c, d)]);
+  }
+  L.forEach(([near, far, n], k) => {
+    rules.set(lefts[k] + MARK, lefts[k]);
+    for (const v of [0, 1]) for (const r of [0, 1])
+      rules.set(lefts[k] + KNOWS_RIGHT[2 * v + r], lefts[n] + MARK + PLAIN[f(far, near, v)] + PLAIN[f(near, v, r)]);
+  });
+  R.forEach(([near, far, n], k) => {
+    for (const l of [0, 1]) for (const v of [0, 1])
+      rules.set(KNOWS_LEFT[2 * l + v] + rights[k], PLAIN[f(l, v, near)] + PLAIN[f(v, near, far)] + rights[n]);
+  });
+  const chars = [...new Set([...PLAIN, ...KNOWS_LEFT, ...KNOWS_RIGHT, MARK, ...lefts, ...rights])].sort(byCode);
+  const start = lefts[0] + MARK + Array.from(cells, (c) => PLAIN[+c]).join("") + rights[0];
+  return { chars, rules, start, preTokenizer: SPLIT };
+}
+
+/** The row of 0s and 1s on a tape between generations, else null. */
+export function generation(tape) {
+  if (tape.length < 2 || tape[1] !== MARK) return null;
+  return Array.from(tape.slice(2, -1), (c) => PLAIN.indexOf(c)).join("");
 }
 
 /** The file's text, as Python writes it. JavaScript lists integer-like keys ("0", "1") first in any

@@ -152,8 +152,59 @@ and n letters are sorted after at most n ticks. It has 704 rules.
 The mark flips every tick, so the tape never stops changing; a run stops when the tape repeats every
 two ticks. A tick costs time in proportion to the tape's length either way, so this buys throughput:
 sorting 1,000 letters does about 320,000 block rewrites a second, where one head does about 10,000
-rules a second on the same machine. Block cellular automata can be universal too, but this one only
-sorts.
+rules a second on the same machine.
+
+### Rule 110
+
+The sorter only sorts. `tokcpu/elementary.py` compiles any of the 256 elementary cellular automata into
+a block tokenizer, and one of them, [Rule 110](https://en.wikipedia.org/wiki/Rule_110), is Turing
+complete ([Cook, 2004](https://www.complex-systems.com/abstracts/v15_i01_a01/)). Its tokenizer has 29
+rules.
+
+A cell's next value depends on both its neighbours, but a block holds two cells, so a generation takes
+two ticks:
+
+1. In one alignment, each cell learns the value of the other cell in its block, and becomes one of
+   eight in-between symbols: `a`–`d` for a cell that knows its left neighbour, `e`–`h` for one that
+   knows its right.
+2. In the other alignment, each cell meets its other neighbour, knows all three values, and writes its
+   new value.
+
+Every cell updates in every generation, all within the same two encodes and decodes. The edges grow the
+tape by a cell on each side every generation, as fast as anything can spread. Printing every second tick
+of `tokenizers/rule110`, started from a single cell:
+
+```
+            ⊢◦·█⊣
+           ⊢◦·██·⊣
+          ⊢◦·███··⊣
+         ⊢◦·██·█···⊣
+        ⊢◦·█████····⊣
+       ⊢◦·██···█·····⊣
+      ⊢◦·███··██······⊣
+     ⊢◦·██·█·███·······⊣
+    ⊢◦·███████·█········⊣
+```
+
+Cook's construction does not start from a blank row. It needs a finite middle between two patterns that
+repeat forever, one to the left and one to the right. A periodic row stays periodic and comes back to
+itself after some generations, so an edge that keeps growing such a pattern needs only finitely many
+states: which generation of the pattern it is at, and where along the pattern. Each state is its own edge
+character, ① to ⑳ on the left and ⑴ to ⒇ on the right. On Rule 110's ether, the 14-cell background
+its gliders travel on, each edge has 14 states and the tokenizer has 146 rules. `tokenizers/rule110-ether`
+starts 56 random cells on the ether, and they settle into two gliders:
+
+![Rule 110 on its ether, 300 generations computed by the tokenizer](web/rule110.png)
+
+The picture is drawn from the tokenizer's ticks (`python -m tokcpu ca tokenizers/rule110-ether --gens 300
+--shade --png web/rule110.png`). The shading is only for the picture: cells inside a run of six that
+occurs in the ether are pale, so the gliders stand out. Gliders like these, and their collisions, are what
+Cook's proof builds its computer from. The tokenizer can run the starting rows his construction needs;
+this repository does not build one for a particular program.
+
+Both run at about 400,000 cell updates a second, in Python and on the
+[page](https://fmindstormer.github.io/tokcpu/), which compiles the tokenizer for any rule in the browser
+and draws the rows as it ticks.
 
 ## Fuzzing tokenizer runtimes
 
@@ -396,8 +447,12 @@ differ. Delete the file to build it again; that needs Node 22 and `cd fuzz && np
 - with transformers.js installed (`cd tests && npm install`), the compiled Hello World runs tick for
   tick the same in JavaScript;
 - the sorter and two heads on one tape are checked tick for tick against a direct reference step;
+- the elementary automata are checked every tick against the block rules, and every generation against
+  the same automaton computed directly (`evolve`): Rules 110, 30, 90, 184 and 1, Rule 110 on its ether,
+  and 80 random rules, starts and backgrounds. With transformers.js installed, Rule 110 on its ether runs
+  400 ticks the same in JavaScript;
 - the page's own compiler (`web/tokcpu.js`) writes the same `tokenizer.json` as Python, byte for byte,
-  for the busy beaver and 20 random machines.
+  for the busy beaver, 20 random machines and 30 automata.
 
 Tested with `tokenizers` 0.22 and 0.23, `transformers` 4.57 and 5.20, and transformers.js 3.7.6, on
 Python 3.13. CI also runs Python 3.10.
@@ -413,6 +468,8 @@ python -m tokcpu run tokenizers/brainfuck programs/reverse.bf --input stressed
 python -m tokcpu run tokenizers/4-state-busy-beaver --show 1           # print every tick
 python -m tokcpu run tokenizers/hello                     # the compiled one; start.txt holds its tape
 python -m tokcpu run tokenizers/sort --show 2             # the block automaton, sorting a pangram
+python -m tokcpu ca tokenizers/rule110 --gens 24          # Rule 110, one row a generation
+python -m tokcpu ca tokenizers/rule110-ether --gens 300 --shade --png rule110.png
 ```
 
 Each folder in `tokenizers/` holds `tokenizer.json` and `tokenizer_config.json`, so it loads with
@@ -431,6 +488,7 @@ tokcpu/compile.py     machine -> tokenizer.json (BPE merges, added tokens, the t
 tokcpu/small.py       rung 1: a binary counter, the 4-state busy beaver, any Turing machine table
 tokcpu/bf.py          rungs 2 and 3: the Brainfuck compiler, the universal interpreter, a reference interpreter
 tokcpu/blocks.py      parallel ticks: a block cellular automaton, and the sorter
+tokcpu/elementary.py  the 256 elementary cellular automata, Rule 110 among them, as block automata
 tokcpu/fuzz.py        differential fuzzing of tokenizer runtimes, with the machine as oracle
 tokcpu/compat.py      the same runtimes against Python on real Hub tokenizers, and the report
 tokcpu/gguf.py        llama.cpp against Python on Hub GGUFs, from their headers alone
@@ -446,7 +504,7 @@ programs/             hello, alphabet, grid, jumps, and reverse (reads input)
 tests/                the checks above, and the transformers.js runner
 web/                  the interactive page; `build` copies its tokenizers into web/tok/
 web/compat/           the dashboard, reading the tables `report --tables` writes into web/compat/data/
-web/tokcpu.js         the page's compiler: a Turing machine table -> tokenizer.json, in JavaScript
+web/tokcpu.js         the page's compiler: a Turing machine table or an elementary automaton -> tokenizer.json
 ```
 
 ## License

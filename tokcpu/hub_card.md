@@ -53,7 +53,10 @@ The full explanation, the compiler and the tests are on GitHub: https://github.c
 | `4-state-busy-beaver` | the 4-state busy beaver: halts after 107 ticks with 13 ones | 24 |
 | `binary-counter` | counts in binary forever | 7 |
 | `sort` | a block cellular automaton: every two-letter block of the tape is rewritten in one tick, sorting it | 704 |
+| `rule110` | Rule 110, which is Turing complete: every cell updates every two ticks, and the tape grows at both edges | 29 |
+| `rule110-ether` | Rule 110 on its ether, the periodic background its gliders travel on, which the edges keep growing | 146 |
 
 Load a subfolder with `AutoTokenizer.from_pretrained("{repo}", subfolder="hello")`. Each one has its
-own `start.txt`. `programs/` holds the Brainfuck sources. The sorter's tape never stops changing (a phase
-mark flips every tick), so stop it when the tape repeats every two ticks.
+own `start.txt`. `programs/` holds the Brainfuck sources. The block automata's tapes never stop changing (a
+phase mark flips every tick): stop the sorter when the tape repeats every two ticks, and Rule 110 whenever you
+like.

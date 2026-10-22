@@ -101,6 +101,13 @@ input[type="text"] { flex: 1; min-width: 0; font: 0.8rem var(--mono); color: var
 .status { font: 600 0.8rem var(--mono); }
 .status.err { color: var(--bad); }
 .status.ok { color: var(--ok); }
+#ca { max-width: none; }
+#ca .stats { grid-template-columns: repeat(auto-fit, minmax(min(100%, 120px), 1fr)); }
+#ca-canvas { width: 100%; height: 360px; display: block; border-radius: 10px; border: 1px solid var(--line); background: var(--code-bg); }
+#ca-tape .c.block { background: var(--chip-b); }
+#ca-tape .c.edge { background: var(--chip-edge); color: var(--muted); }
+#ca-tape .c.mid { background: var(--chip-out); }
+#ca input[type="checkbox"] { accent-color: var(--head); vertical-align: -2px; }
 
 /* the write-up */
 main.wrap { display: grid; gap: 2.6rem; padding-block: 2.4rem 3.5rem; }
@@ -231,8 +238,45 @@ while (nxt := <b>tok.decode(tok.encode(tape))</b>) != tape:
   <section>
     <h2>Parallel ticks</h2>
     <p>One encode reads the whole tape, but a single head uses two characters of it. Heads that never meet each get their rule applied in the same tick: two busy beavers on one tape finish together in 107 ticks.</p>
-    <p>Going further, a stock <code>Split</code> pre-tokenizer can cut the tape into two-character blocks before BPE runs. With a merge for every block, one tick rewrites the whole tape: a block cellular automaton. A phase mark after the left edge shifts the blocks by one character every other tick, so information crosses block boundaries. The demo sorts letters, odd-even transposition sort, one round per tick: <code>⊢◦thequickbrownfoxjumpsoverthelazydog⊣</code> is sorted after 30 ticks, with 704 rules.</p>
+    <p>Going further, a stock <code>Split</code> pre-tokenizer can cut the tape into two-character blocks before BPE runs. With a merge for every block, one tick rewrites the whole tape: a block cellular automaton. A phase mark after the left edge shifts the blocks by one character every other tick, so information crosses block boundaries. One demo sorts letters, odd-even transposition sort, one round per tick: <code>⊢◦thequickbrownfoxjumpsoverthelazydog⊣</code> is sorted after 30 ticks, with 704 rules.</p>
+    <p>The other runs <a href="https://en.wikipedia.org/wiki/Rule_110">Rule 110</a>, which is <a href="https://www.complex-systems.com/abstracts/v15_i01_a01/">Turing complete</a>, in 29 rules. Every cell updates in every generation, which takes two ticks: in the first, each cell learns the value of the other cell in its block; in the second, the blocks have shifted, each cell learns its other neighbour and updates. The edges grow the tape by a cell on each side every generation. Rule 110 computes on a background that repeats forever, its <i>ether</i>, and the edges can grow that too: it takes 146 rules. Below, the tokenizer compiles in this page for any of the 256 elementary rules, and every row is one more encode and decode.</p>
   </section>
+  <div class="bench" id="ca">
+    <div class="row">
+      <label class="small" for="ca-preset">Start from</label>
+      <select id="ca-preset"></select>
+      <label class="small" for="ca-rule">Rule</label>
+      <input type="text" class="narrow" id="ca-rule" inputmode="numeric" maxlength="3" spellcheck="false" autocomplete="off">
+      <label class="small" for="ca-bg">Background</label>
+      <select id="ca-bg"><option value="0">blank</option><option value="11111000100110">Rule 110's ether</option></select>
+    </div>
+    <div class="row">
+      <label class="small" for="ca-cells">Cells</label>
+      <input type="text" id="ca-cells" spellcheck="false" autocomplete="off" aria-describedby="ca-cells-note">
+      <span class="small" id="ca-cells-note">0s and 1s, an even number</span>
+    </div>
+    <div class="row">
+      <button class="act" id="ca-run">Run</button>
+      <button class="act ghost" id="ca-step">Step one tick</button>
+      <button class="act ghost" id="ca-reset">Reset</button>
+      <label class="small" for="ca-speed">Speed</label>
+      <select id="ca-speed"><option value="1">1 generation a frame</option><option value="4" selected>4 generations a frame</option><option value="16">16 generations a frame</option></select>
+      <label class="small"><input type="checkbox" id="ca-shade"> shade the background</label>
+      <span class="status" id="ca-status"></span>
+    </div>
+    <div class="stats">
+      <div class="stat"><b id="ca-gen">0</b><span>generations</span></div>
+      <div class="stat"><b id="ca-ticks">0</b><span>ticks</span></div>
+      <div class="stat"><b id="ca-width">–</b><span>cells on the tape</span></div>
+      <div class="stat"><b id="ca-rate">–</b><span>cell updates a second, here</span></div>
+      <div class="stat"><b id="ca-rules">–</b><span>merge rules in the file</span></div>
+    </div>
+    <canvas id="ca-canvas" role="img" aria-label="The automaton's generations, one row each, the newest at the bottom"></canvas>
+    <div>
+      <p class="small">The start of the tape, as the tokenizer splits it: every two-character block is one token. Between generations a cell is <code>·</code> or <code>█</code>; after the first tick of a generation, <code>a</code>–<code>d</code> is a cell that knows its left neighbour and <code>e</code>–<code>h</code> one that knows its right.</p>
+      <div class="tape" id="ca-tape" aria-live="off"></div>
+    </div>
+  </div>
 
   <section>
     <h2>Numbers</h2>
@@ -246,6 +290,9 @@ while (nxt := <b>tok.decode(tok.encode(tape))</b>) != tape:
         <tr><td>Grid (nested loops)</td><td class="num">17,474</td></tr>
         <tr><td>Jumps (skipped and nested)</td><td class="num">21,415</td></tr>
         <tr><td>Reverse, input <code>stressed</code></td><td class="num">1,904</td></tr>
+        <tr><td>Sort, a block automaton</td><td class="num">704</td><td class="num">95 KB</td><td>the pangram's 35 letters</td><td class="num">30</td></tr>
+        <tr><td>Rule 110</td><td class="num">29</td><td class="num">5 KB</td><td>one cell, any number of generations</td><td class="num">2 a generation</td></tr>
+        <tr><td>Rule 110 on its ether</td><td class="num">146</td><td class="num">22 KB</td><td>56 cells, any number of generations</td><td class="num">2 a generation</td></tr>
       </tbody>
     </table></div>
     <p class="small">Clock speed on the universal tokenizer running Hello World, best of three runs on an Apple M4: about 9,200 ticks a second with the <code>tokenizers</code> library, 5,900 through <code>transformers</code>' AutoTokenizer, 11,700 with transformers.js in Node, and 17,300 with this page in headless Chromium. Every tick of every run in the test suite is checked against the machine's own rules, and every output against a plain Brainfuck interpreter, in Python and in transformers.js.</p>
@@ -258,14 +305,15 @@ python -m tokcpu build                                   # writes tokenizers/
 python -m tokcpu run tokenizers/brainfuck programs/hello.bf --auto
 python -m tokcpu run tokenizers/brainfuck programs/reverse.bf --input stressed
 python -m tokcpu run tokenizers/4-state-busy-beaver --show 1
-python -m tokcpu run tokenizers/sort --show 2</pre>
+python -m tokcpu run tokenizers/sort --show 2
+python -m tokcpu ca tokenizers/rule110 --gens 24</pre>
     <p>The tokenizer folders load with <code>AutoTokenizer.from_pretrained</code>, so they can go on the Hugging Face Hub like any other.</p>
   </section>
 </main>
 <footer class="wrap">This page loads <code>tokenizer.json</code> files and runs them with transformers.js 3.7.6, the JavaScript port of Hugging Face Transformers. The labels on the head chip come from a small side file that names each state; the tokenizer itself does all the work.</footer>
 
 <script type="module">
-import { parseTable, turing, spec, stringify, CONFIG } from "./tokcpu.js";
+import { parseTable, turing, spec, stringify, CONFIG, automaton, generation, caTable, ETHER, COLLISION } from "./tokcpu.js";
 const $ = (id) => document.getElementById(id);
 const LEFT = "⊢", RIGHT = "⊣", OUT_END = "┃", PROG_END = "║", IP = "▼", DP = "▲";
 const HALF = "⓪①②③④⑤⑥⑦⑧⑨ⓐⓑⓒⓓⓔⓕ";   // a printed byte's high nibble, waiting for its low one
@@ -563,11 +611,166 @@ function setup() {
   $("reset").addEventListener("click", () => cur && reset());
 }
 
+// ---- the elementary cellular automata: the tokenizer compiles here, and each row is two ticks ----
+const CA_PRESETS = {
+  "Rule 110: gliders on the ether": { rule: 110, bg: ETHER, cells: COLLISION, shade: true },
+  "Rule 110 from one cell": { rule: 110, bg: "0", cells: "01" },
+  "Rule 30 from one cell": { rule: 30, bg: "0", cells: "01" },
+  "Rule 90 from one cell": { rule: 90, bg: "0", cells: "01" },
+  "Rule 184, traffic": { rule: 184, bg: "0", cells: "1101100111010110011101101001101011101101110010111011010110011011" },
+};
+const CA_MAX = 5000;          // generations; the tape grows by two cells each
+let ca = null, caRunning = false, caRateT = 0, caRateN = 0;
+
+function caWindows(number, word, width = 6) {
+  const f = caTable(number), seen = new Set(), out = new Set();
+  let row = word;
+  while (!seen.has(row)) {
+    seen.add(row);
+    const two = row.repeat(Math.ceil(width / row.length) + 1);
+    for (let i = 0; i < row.length; i++) out.add(two.slice(i, i + width));
+    const r = row, p = r.length;
+    row = Array.from(r, (c, i) => f(+r[(i - 1 + p) % p], +c, +r[(i + 1) % p])).join("");
+  }
+  return out;
+}
+function caStatus(msg, cls = "") { const s = $("ca-status"); s.textContent = msg; s.className = "status " + cls; }
+function hex(name) {
+  const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return [1, 3, 5].map((i) => parseInt(v.slice(i, i + 2), 16));
+}
+function caColors() {
+  ca.col = { out: hex("--code-bg"), zero: hex("--sheet"), one: hex("--ink"), pale: hex("--line"), hot: hex("--head"), warm: hex("--chip-out") };
+}
+function caSize() {
+  const cv = $("ca-canvas"), w = cv.clientWidth, h = cv.clientHeight, px = w < 500 ? 1.5 : 2;
+  ca.cols = Math.max(1, Math.floor(w / px)); ca.rowsVis = Math.max(1, Math.floor(h / px));
+  ca.buf = new ImageData(ca.cols, ca.rowsVis);
+  ca.off = Object.assign(document.createElement("canvas"), { width: ca.cols, height: ca.rowsVis });
+  const dpr = window.devicePixelRatio || 1;
+  cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+}
+function caPaintRow(y, { row, g }) {
+  const d = ca.buf.data, c = ca.col, shade = $("ca-shade").checked ? ca.windows : null;
+  const left = Math.floor(ca.cols / 2 - ca.center) - g;      // canvas column of the row's first cell
+  let bg = null;
+  if (shade) {
+    bg = new Uint8Array(row.length);
+    for (let i = 0; i + 6 <= row.length; i++) if (shade.has(row.slice(i, i + 6))) bg.fill(1, i, i + 6);
+  }
+  for (let x = 0; x < ca.cols; x++) {
+    const i = x - left, v = row[i];
+    const rgb = v === undefined ? c.out : shade ? (bg[i] ? (v === "1" ? c.pale : c.zero) : (v === "1" ? c.hot : c.warm)) : (v === "1" ? c.one : c.zero);
+    const k = 4 * (y * ca.cols + x);
+    d[k] = rgb[0]; d[k + 1] = rgb[1]; d[k + 2] = rgb[2]; d[k + 3] = 255;
+  }
+}
+function caPaintAll() {
+  ca.buf.data.fill(0);
+  ca.hist = ca.hist.slice(-ca.rowsVis);
+  ca.hist.forEach((r, y) => caPaintRow(y, r));
+  caBlit();
+}
+function caAddRow(row) {
+  ca.hist.push({ row, g: ca.gen });
+  if (ca.hist.length > ca.rowsVis) {
+    ca.hist.shift();
+    ca.buf.data.copyWithin(0, 4 * ca.cols);                  // scroll up one row
+  }
+  caPaintRow(ca.hist.length - 1, ca.hist[ca.hist.length - 1]);
+}
+function caBlit() {
+  const cv = $("ca-canvas"), ctx = cv.getContext("2d");
+  ca.off.getContext("2d").putImageData(ca.buf, 0, 0);
+  ctx.imageSmoothingEnabled = false;
+  ctx.fillStyle = `rgb(${ca.col.out.join(",")})`;
+  ctx.fillRect(0, 0, cv.width, cv.height);
+  const s = cv.width / ca.cols;
+  ctx.drawImage(ca.off, 0, 0, ca.cols * s, ca.rowsVis * s);
+}
+function caRender() {
+  $("ca-gen").textContent = ca.gen.toLocaleString();
+  $("ca-ticks").textContent = ca.ticks.toLocaleString();
+  $("ca-width").textContent = (ca.tape.length - (ca.tape[1] === "◦" ? 3 : 2)).toLocaleString();
+  const toks = ca.tok.tokenize(ca.tape), frag = document.createDocumentFragment();
+  for (const t of toks.slice(0, 40)) {
+    const s = document.createElement("span");
+    const edge = /[⊢⊣①-⒇]/.test(t);
+    s.className = "c " + (edge ? "edge" : Array.from(t).length === 2 ? "block" : "mid");
+    s.textContent = t;
+    frag.append(s);
+  }
+  if (toks.length > 40) { const s = document.createElement("span"); s.className = "c edge"; s.textContent = `… ${(toks.length - 40).toLocaleString()} more`; frag.append(s); }
+  $("ca-tape").replaceChildren(frag);
+  caBlit();
+}
+function caTick() {
+  ca.tape = tick(ca.tok, ca.tape); ca.ticks++;
+  const row = generation(ca.tape);
+  if (row !== null) { ca.gen++; caAddRow(row); caRateN += row.length; }
+}
+function caLoop() {
+  if (!caRunning) return;
+  const t0 = performance.now(), per = Number($("ca-speed").value);
+  for (let n = 0; n < per && performance.now() - t0 < 30 && ca.gen < CA_MAX; n++) { caTick(); caTick(); }
+  const now = performance.now();
+  if (now - caRateT > 500) { $("ca-rate").textContent = Math.round(caRateN * 1000 / (now - caRateT)).toLocaleString(); caRateT = now; caRateN = 0; }
+  if (ca.gen >= CA_MAX) { caRunning = false; $("ca-run").textContent = "Run"; caStatus(`stopped at ${CA_MAX.toLocaleString()} generations`, "ok"); }
+  caRender();
+  if (caRunning) requestAnimationFrame(caLoop);
+}
+function caReset() {
+  caRunning = false; $("ca-run").textContent = "Run";
+  const rule = $("ca-rule").value.trim(), cells = $("ca-cells").value.trim(), bg = $("ca-bg").value;
+  try {
+    if (!/^\d{1,3}$/.test(rule) || +rule > 255) throw new Error("the rule is a number from 0 to 255");
+    if (cells.length > 2000) throw new Error("at most 2,000 cells");
+    const m = automaton(+rule, cells, bg, bg);
+    const tok = new PTT(spec(m.chars, m.rules, m.preTokenizer), CONFIG);
+    ca = { tok, tape: m.start, gen: 0, ticks: 0, hist: [], center: cells.length / 2, windows: caWindows(+rule, bg) };
+    caColors(); caSize();
+    caAddRow(generation(m.start));
+    $("ca-rules").textContent = m.rules.size.toLocaleString();
+    $("ca-rate").textContent = "–";
+    caStatus("ready");
+    caRender();
+  } catch (e) { caStatus(e.message, "err"); }
+}
+function caSetup() {
+  $("ca-preset").innerHTML = Object.keys(CA_PRESETS).map((k) => `<option>${k}</option>`).join("");
+  const preset = () => {
+    const p = CA_PRESETS[$("ca-preset").value];
+    $("ca-rule").value = p.rule; $("ca-bg").value = p.bg; $("ca-cells").value = p.cells; $("ca-shade").checked = !!p.shade;
+  };
+  preset();
+  $("ca-preset").addEventListener("change", () => { preset(); caReset(); });
+  for (const id of ["ca-rule", "ca-bg", "ca-cells"]) $(id).addEventListener("change", caReset);
+  $("ca-shade").addEventListener("change", () => ca && caPaintAll());
+  $("ca-reset").addEventListener("click", caReset);
+  $("ca-run").addEventListener("click", () => {
+    if (!ca) return;
+    if (ca.gen >= CA_MAX) caReset();
+    caRunning = !caRunning;
+    $("ca-run").textContent = caRunning ? "Pause" : "Run";
+    if (caRunning) { caStatus("running"); caRateT = performance.now(); caRateN = 0; requestAnimationFrame(caLoop); } else caStatus("paused");
+  });
+  $("ca-step").addEventListener("click", () => {
+    if (!ca || ca.gen >= CA_MAX) return;
+    caRunning = false; $("ca-run").textContent = "Run"; caStatus(ca.ticks % 2 ? "second tick: every cell updates" : "first tick: neighbours swap values");
+    caTick(); caRender();
+  });
+  let resized = 0;
+  window.addEventListener("resize", () => { clearTimeout(resized); resized = setTimeout(() => { if (ca) { caSize(); caPaintAll(); } }, 150); });
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { if (ca) { caColors(); caPaintAll(); } });
+  caReset();
+}
+
 setup();
 $("progbox").hidden = false;
 try {
   ({ PreTrainedTokenizer: PTT } = await import("https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.6/dist/transformers.min.js"));
   if (!("DecompressionStream" in window)) throw new Error("this browser cannot unpack the tokenizer files");
+  caSetup();
   await choose(MACHINES[0]);
 } catch (e) {
   status(`transformers.js did not load, so the tokenizer can't run here (${e.message})`, "err");

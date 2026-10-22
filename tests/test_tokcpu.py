@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 from tokenizers import Tokenizer
 
-from tokcpu import bf, blocks, small
+from tokcpu import bf, blocks, elementary, small
 from tokcpu.compile import save, tokenizer_spec
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -79,6 +79,37 @@ def test_block_sort():
             "".join(sorted(blocks.LETTERS * 2, key=lambda c, k=k: hash((c, k)))) for k in range(5)]:
         end, n = run_blocks(tok, rules, blocks.tape(s))
         assert blocks.cells(end) == "".join(sorted(s)) and n <= len(s) + 1, (s, n)
+
+
+def automata():
+    """Rules 110, 30, 90 and 184 from small starts, Rule 110 on its ether, and random rules, starts and
+    backgrounds (odd rules turn a blank background into a flashing one)."""
+    rng = random.Random(3)
+    bits = lambda n: "".join(rng.choice("01") for _ in range(n))
+    yield from [(110, "01", "0", "0"), (30, "01", "0", "0"), (90, "10", "0", "0"), (184, "110100", "0", "0"),
+                (1, "01", "0", "0"), (110, elementary.COLLISION, elementary.ETHER, elementary.ETHER)]
+    for _ in range(80):
+        yield rng.randrange(256), bits(2 * rng.randrange(1, 8)), bits(rng.randrange(1, 5)), bits(rng.randrange(1, 5))
+
+
+def test_elementary_automata():
+    """Every generation matches the automaton computed directly, and every tick the block rules."""
+    for number, cells, left, right in automata():
+        try:
+            spec, rules, tape = elementary.automaton(number, cells, left, right)
+        except ValueError:          # a background with too many states at an edge
+            continue
+        tok = Tokenizer.from_str(json.dumps(spec, ensure_ascii=False))
+        want = elementary.evolve(number, cells, left, right, 40)
+        for g in range(41):
+            assert elementary.generation(tape) == want[g], (number, cells, left, right, g)
+            for _ in range(2):
+                nxt = tok.decode(tok.encode(tape).ids)
+                assert nxt == blocks.step(rules, tape)
+                tape = nxt
+    assert len(elementary.rules(110)) == 29 and len(elementary.rules(110, elementary.ETHER, elementary.ETHER)) == 146
+    with pytest.raises(ValueError):
+        elementary.automaton(110, "011")
 
 
 def test_counter_counts():
@@ -181,6 +212,21 @@ def test_page_compiler_matches(tmp_path):
         assert out[1] == tape
 
 
+def test_page_compiles_automata(tmp_path):
+    """The page's compiler writes the same automaton tokenizers as Python, byte for byte."""
+    if not shutil.which("node"):
+        pytest.skip("node not installed")
+    for number, cells, left, right in list(automata())[:30]:
+        try:
+            spec, _, tape = elementary.automaton(number, cells, left, right)
+        except ValueError:
+            continue
+        out = subprocess.run(["node", str(ROOT / "tests" / "js_compile.mjs"), "--ca", str(number), cells, left, right],
+                             capture_output=True, text=True, check=True).stdout.split("\n")
+        assert out[0] == json.dumps(spec, ensure_ascii=False, separators=(",", ":")), number
+        assert out[1] == tape
+
+
 def test_fuzz_models_agree_with_rust():
     """The fuzzer's models of each feature (equivalent variants, normalizers, pre-tokenizers, byte
     fallback, added tokens that match the input) agree with the Rust library, so a runtime that
@@ -214,6 +260,22 @@ def test_transformers_js(tmp_path):
                          capture_output=True, text=True, check=True, cwd=ROOT / "tests").stdout
     res = json.loads(out.strip().splitlines()[-1])
     assert res["firstMismatch"] == -1 and res["ticks"] == len(trace) - 1
+
+
+def test_transformers_js_automaton(tmp_path):
+    """Rule 110 on its ether, 200 generations in transformers.js: the Split pre-tokenizer cuts the same
+    blocks, and the edges keep growing the background."""
+    if not shutil.which("node") or not (ROOT / "tests" / "node_modules" / "@huggingface" / "transformers").exists():
+        pytest.skip("transformers.js not installed")
+    spec, rules, tape = elementary.automaton(110, elementary.COLLISION, elementary.ETHER, elementary.ETHER)
+    save(spec, tmp_path / "rule110", tape)
+    trace = [tape]
+    for _ in range(400):
+        trace.append(blocks.step(rules, trace[-1]))
+    (tmp_path / "trace.txt").write_text("\n".join(trace))
+    out = subprocess.run(["node", str(ROOT / "tests" / "js_ticks.mjs"), str(tmp_path / "rule110"), str(tmp_path / "trace.txt"), "400"],
+                         capture_output=True, text=True, check=True, cwd=ROOT / "tests").stdout
+    assert json.loads(out.strip().splitlines()[-1]) == {"ticks": 400, "firstMismatch": -1}
 
 
 def test_compat_finds_final_sigma(tmp_path):

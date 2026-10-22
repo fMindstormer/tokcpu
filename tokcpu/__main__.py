@@ -5,6 +5,7 @@
     python -m tokcpu run tokenizers/brainfuck programs/reverse.bf --input stressed
     python -m tokcpu run tokenizers/4-state-busy-beaver --show 1
     python -m tokcpu run tokenizers/hello --auto   (through transformers' AutoTokenizer)
+    python -m tokcpu ca tokenizers/rule110 --gens 24   a cellular automaton's generations, one row each
     python -m tokcpu hub USER/tokcpu [--push]      stage (and upload) the Hugging Face Hub repo
     python -m tokcpu fuzz --cases 200              differential fuzzing of tokenizer runtimes
     python -m tokcpu check MODEL [MODEL...]        does a Hub tokenizer (or a local folder) give the same ids in JavaScript?
@@ -26,7 +27,7 @@ import sys
 import time
 from pathlib import Path
 
-from . import bf, blocks, small
+from . import bf, blocks, elementary, small
 from .compile import save
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -54,9 +55,11 @@ def build(out: Path, web: bool = True) -> None:
             if tape is not None:
                 meta["start"] = tape
             (d / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, separators=(",", ":")))
-    spec, rules, tape = blocks.sorter()
-    path = save(spec, out / "sort", tape)
-    print(f"{'sort':22s} {len(rules):6d} rules  {path.stat().st_size / 1e6:6.2f} MB")
+    for name, (spec, rules, tape) in [("sort", blocks.sorter()), ("rule110", elementary.automaton(110, "01")),
+                                      ("rule110-ether", elementary.automaton(110, elementary.COLLISION,
+                                                                             elementary.ETHER, elementary.ETHER))]:
+        path = save(spec, out / name, tape)
+        print(f"{name:22s} {len(rules):6d} rules  {path.stat().st_size / 1e6:6.2f} MB")
 
 
 def hub(repo: str, out: Path, push: bool) -> None:
@@ -92,6 +95,11 @@ def main(argv=None) -> int:
     r.add_argument("--auto", action="store_true", help="load with transformers' AutoTokenizer")
     r.add_argument("--show", type=int, default=0, help="print the tape every N ticks")
     r.add_argument("--max", type=int, default=10 ** 9)
+    ca = sub.add_parser("ca", help="run an elementary cellular automaton's tokenizer, one row a generation")
+    ca.add_argument("tokenizer")
+    ca.add_argument("--gens", type=int, default=24)
+    ca.add_argument("--png", help="draw the rows into this PNG instead of printing them")
+    ca.add_argument("--shade", action="store_true", help="draw Rule 110's ether pale, so its gliders stand out")
     h = sub.add_parser("hub")
     h.add_argument("repo", help="the Hub repo id, e.g. your-name/tokcpu")
     h.add_argument("--out", default=str(ROOT / "build" / "hub"))
@@ -127,6 +135,19 @@ def main(argv=None) -> int:
         return 0
     if a.cmd == "hub":
         hub(a.repo, Path(a.out), a.push)
+        return 0
+    if a.cmd == "ca":
+        from tokenizers import Tokenizer
+        d = Path(a.tokenizer)
+        t0 = time.time()
+        rows = elementary.run(Tokenizer.from_file(str(d / "tokenizer.json")), (d / "start.txt").read_text(), a.gens)
+        dt = time.time() - t0
+        if a.png:
+            elementary.png(rows, a.png, elementary.ether_windows() if a.shade else None)
+        else:
+            for g, row in enumerate(rows):
+                print(" " * (a.gens - g) + row.replace("0", "·").replace("1", "█"))
+        print(f"\n{a.gens:,} generations ({2 * a.gens:,} ticks) in {dt:.2f} s", file=sys.stderr)
         return 0
     if a.cmd == "check":
         from .compat import check

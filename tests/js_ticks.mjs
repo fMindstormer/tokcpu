@@ -1,7 +1,8 @@
-// Run a tokenizer folder with transformers.js against a reference trace (one tape per line).
+// Run a tokenizer folder with transformers.js against a reference trace (one tape per line), until the
+// tape stops changing or, if given, for at most MAX ticks.
 import { PreTrainedTokenizer } from "@huggingface/transformers";
 import fs from "fs";
-const [dir, tracePath] = process.argv.slice(2);
+const [dir, tracePath, max] = process.argv.slice(2);
 const tok = new PreTrainedTokenizer(JSON.parse(fs.readFileSync(dir + "/tokenizer.json", "utf8")),
                                     JSON.parse(fs.readFileSync(dir + "/tokenizer_config.json", "utf8")));
 const want = fs.readFileSync(tracePath, "utf8").split("\n");
@@ -12,5 +13,6 @@ for (;;) {
   if (next === tape) break;
   if (bad < 0 && next !== want[n + 1]) bad = n;
   tape = next; n++;
+  if (max && n >= Number(max)) break;
 }
 console.log(JSON.stringify({ ticks: n, firstMismatch: bad }));
