@@ -25,9 +25,8 @@ written there too:
 `AutoTokenizer.from_pretrained("fMindstormer/tokcpu")` loads the universal tokenizer, with Hello World's
 tape in its `start.txt`.
 
-**Interactive page:** https://claude.ai/artifact/GXyttZQHii8GFLEjKhMZe9 (private until you share it from
-its Share menu). It runs these same files in the browser with transformers.js, and compiles Turing
-machines you type into new tokenizers you can download.
+**Interactive page:** https://fmindstormer.github.io/tokcpu/ runs these same files in the browser with
+transformers.js, and compiles Turing machines you type into new tokenizers you can download.
 
 ## How one tick works
 
@@ -235,7 +234,7 @@ differ on one rare character:
 On everyday text, only those three byte-fallback models and five others differ. transformers.js 3.7.6
 also drops the leading `▁` of Metaspace tokenizers with `prepend_scheme: "first"` (11 models), fixed in 4.
 
-The results are on a [dashboard](https://claude.ai/artifact/CnCFwFeqHXPsNTKdyuod3d), and `--out` keeps them
+The results are on a [dashboard](https://fmindstormer.github.io/tokcpu/compat/), and `--out` keeps them
 as JSON. The run takes about an hour, mostly waiting on the Hub's rate limit, and resumes where it stopped.
 
 **Your own tokenizer.** Before you ship a tokenizer to the browser, check it (after `cd fuzz && npm
@@ -349,7 +348,8 @@ tokcpu/blocks.py      parallel ticks: a block cellular automaton, and the sorter
 tokcpu/fuzz.py        differential fuzzing of tokenizer runtimes, with the machine as oracle
 tokcpu/compat.py      the same runtimes against Python on real Hub tokenizers, and the report
 tokcpu/gguf.py        llama.cpp against Python on Hub GGUFs, from their headers alone
-.github/workflows/    the tests on every push; compat.yml, the top 1,000 again on each new release
+.github/workflows/    the tests on every push; compat.yml, the top 1,000 again on each new release; pages.yml,
+                      web/ and the dashboard on GitHub Pages
 fuzz/                 the JavaScript runtimes for the fuzzer (runtimes.mjs) and compat (compat.mjs), pinned;
                       llama_tok.c, llama.cpp's tokenizer for gguf
 tokcpu/__main__.py    build, run, and stage the Hub repo
@@ -357,6 +357,7 @@ tokcpu/hub_card.md    the Hub repo's model card
 programs/             hello, alphabet, grid, jumps, and reverse (reads input)
 tests/                the checks above, and the transformers.js runner
 web/                  the interactive page; `build` copies its tokenizers into web/tok/
+web/compat/           the dashboard, reading the tables `report --tables` writes into web/compat/data/
 web/tokcpu.js         the page's compiler: a Turing machine table -> tokenizer.json, in JavaScript
 ```
 

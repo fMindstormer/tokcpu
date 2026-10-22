@@ -1,4 +1,7 @@
+<!doctype html>
+<html lang="en">
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Tokenizer CPU</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -101,8 +104,9 @@ input[type="text"] { flex: 1; min-width: 0; font: 0.8rem var(--mono); color: var
 
 /* the write-up */
 main.wrap { display: grid; gap: 2.6rem; padding-block: 2.4rem 3.5rem; }
-section { display: grid; gap: 0.9rem; max-width: 46rem; }
+section { display: grid; gap: 0.9rem; max-width: 46rem; min-width: 0; }
 section p { max-width: 42rem; }
+section p code { overflow-wrap: anywhere; }
 code { font: 0.86em var(--mono); background: var(--code-bg); padding: 0.05em 0.3em; border-radius: 4px; }
 pre { font: 0.82rem/1.6 var(--mono); background: var(--sheet); border: 1px solid var(--line); border-radius: 10px;
   padding: 0.9rem 1rem; overflow-x: auto; margin: 0; }

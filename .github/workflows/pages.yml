@@ -1,0 +1,46 @@
+name: pages
+# Publishes web/ on GitHub Pages: the interactive page at the root, and the compatibility dashboard at
+# compat/, with its tables written from the latest results on the compat-results branch. Runs when the page
+# changes on main, after each compat run, and by hand.
+on:
+  push:
+    branches: [main]
+    paths: [web/**, tokcpu/**, programs/**, .github/workflows/pages.yml]
+  workflow_run:
+    workflows: [compat]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Build the site
+        run: |
+          pip install tokenizers
+          python -m tokcpu build                  # the page's tokenizers, into web/tok/
+          git fetch -q --depth 1 origin compat-results
+          git show FETCH_HEAD:results.json > results.json
+          python -m tokcpu report results.json --tables web/compat/data > /dev/null
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+      - id: deploy
+        uses: actions/deploy-pages@v4

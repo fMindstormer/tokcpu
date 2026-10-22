@@ -449,7 +449,8 @@ def _cause(text_name: str, diff: dict, js: bool = True) -> str:
 
 
 def tables(data: dict) -> dict[str, list[dict]]:
-    """The results as flat tables for the dashboard: one row per model, and one per difference."""
+    """The results as flat tables for the dashboard (web/compat/): one row per model, one per difference, one
+    per text, and the run's versions."""
     texts = data["texts"]
     js = data.get("kind") != "gguf"
     models, diffs = [], []
@@ -495,8 +496,11 @@ def tables(data: dict) -> dict[str, list[dict]]:
                                   "js": json.dumps(v.get("js", ""), ensure_ascii=False)[:160]})
         row["causes"] = ", ".join(sorted(causes))
         models.append(row)
+    ver = data["versions"]
     return {"models": models, "differences": diffs,
-            "texts": [{"text": k, "group": v["group"], "content": v["text"]} for k, v in texts.items()]}
+            "texts": [{"text": k, "group": v["group"], "content": v["text"]} for k, v in texts.items()],
+            "run": [{"generated": data["generated"], "runtimes": ", ".join(ver["runtimes"]),
+                     **{k: ver.get(k) for k in ("node", "v8", "transformers", "tokenizers")}}]}
 
 
 def summary(data: dict, previous: dict | None = None, most: int = 15) -> str:

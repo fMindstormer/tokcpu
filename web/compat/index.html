@@ -1,0 +1,436 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tokenizer compatibility</title>
+<meta name="description" content="Do the most-downloaded Hugging Face tokenizers give the same ids in JavaScript as in Python?">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<style>
+  /* Standalone: the tokens the page is written against, in light and dark. Data comes from data/*.json,
+     which .github/workflows/pages.yml writes from the compat-results branch (python -m tokcpu report --tables). */
+  :root {
+    color-scheme: light;
+    --font-anthropic-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --font-anthropic-serif: Georgia, "Iowan Old Style", "Times New Roman", serif;
+    --cds-font-size-title: 1.75rem; --cds-font-size-heading: 1.05rem; --cds-font-size-body: .95rem; --cds-font-size-caption: .8rem;
+    --cds-font-weight-medium: 600;
+    --cds-gap-xs: 4px; --cds-gap-sm: 8px; --cds-gap-md: 12px; --cds-gap-lg: 24px;
+    --cds-pad-xs: 3px; --cds-pad-sm: 8px; --cds-pad-md: 12px; --cds-pad-lg: 16px;
+    --cds-radius: 8px;
+    --color-bg: #f6f6f4; --color-panel: #fcfcfb; --color-fg: #0b0b0b; --color-fg-muted: #52514e; --color-border-line: #e2e1dc;
+    --color-ok: #1a7f37; --color-bad: #c4322f; --color-warn: #b26a00;
+    --cds-chart-grid: #ecebe7; --cds-chart-muted: #8f8e88; --cds-chart-status-critical: #e34948;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --color-bg: #121211; --color-panel: #1a1a19; --color-fg: #f0efec; --color-fg-muted: #c3c2b7; --color-border-line: #33332f;
+      --color-ok: #57c27a; --color-bad: #ff8a80; --color-warn: #e0a336;
+      --cds-chart-grid: #2a2a27; --cds-chart-muted: #7d7c75; --cds-chart-status-critical: #e66767;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --color-bg: #121211; --color-panel: #1a1a19; --color-fg: #f0efec; --color-fg-muted: #c3c2b7; --color-border-line: #33332f;
+    --color-ok: #57c27a; --color-bad: #ff8a80; --color-warn: #e0a336;
+    --cds-chart-grid: #2a2a27; --cds-chart-muted: #7d7c75; --cds-chart-status-critical: #e66767;
+  }
+  body { margin: 0; background: var(--color-bg); color: var(--color-fg); }
+  .tc { max-width: 76rem; margin: 0 auto; padding: 32px 16px 48px; }
+  .tc a { color: inherit; }
+  .dash-skeleton { color: var(--color-fg-muted); }
+</style>
+<style>
+  .tc { display: grid; gap: var(--cds-gap-lg); font-family: var(--font-anthropic-sans); font-variant-numeric: tabular-nums; }
+  .tc h1 { font-family: var(--font-anthropic-serif); font-weight: 400; font-size: var(--cds-font-size-title); margin: 0; text-wrap: balance; }
+  .tc h2 { font-size: var(--cds-font-size-heading); font-weight: var(--cds-font-weight-medium); margin: 0; }
+  .tc p { margin: 0; max-width: 70ch; }
+  .tc-lede { color: var(--color-fg-muted); }
+  .tc-muted { color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); }
+  .tc-figs { display: grid; gap: var(--cds-gap-md); grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr)); }
+  .tc-fig { background: var(--color-panel); border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); padding: var(--cds-pad-md) var(--cds-pad-lg); display: grid; gap: var(--cds-gap-xs); align-content: start; }
+  .tc-fig b { font-family: var(--font-anthropic-serif); font-weight: 400; font-size: var(--cds-font-size-title); line-height: 1.1; }
+  .tc .tc-fig b { font-weight: 400; }
+  .tc-grid { display: grid; gap: var(--cds-gap-md); grid-template-columns: repeat(auto-fit, minmax(min(100%, 26rem), 1fr)); }
+  .tc-card { background: var(--color-panel); border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); padding: var(--cds-pad-lg); display: grid; gap: var(--cds-gap-sm); align-content: start; min-width: 0; }
+  .tc-scroll { overflow: auto; max-height: 34rem; }
+  .tc table { border-collapse: collapse; width: 100%; font-size: var(--cds-font-size-caption); }
+  .tc th, .tc td { text-align: left; padding: var(--cds-pad-xs) var(--cds-pad-sm); border-bottom: 1px solid var(--color-border-line); vertical-align: top; }
+  .tc th { position: sticky; top: 0; background: var(--color-panel); font-weight: var(--cds-font-weight-medium); white-space: nowrap; }
+  .tc th button { all: unset; cursor: pointer; }
+  .tc th button:focus-visible { outline: 2px solid var(--color-fg); outline-offset: 2px; }
+  .tc td.num, .tc th.num { text-align: right; }
+  .tc code { font-size: var(--cds-font-size-caption); word-break: break-all; }
+  .tc-pill { display: inline-block; padding: 0 var(--cds-pad-xs); border-radius: var(--cds-radius); font-size: var(--cds-font-size-caption); white-space: nowrap; }
+  .tc-pill.same { color: var(--color-ok); }
+  .tc-pill.differs { color: var(--color-bad); }
+  .tc-pill.cannot { color: var(--color-warn); }
+  .tc-tools { display: flex; flex-wrap: wrap; gap: var(--cds-gap-sm); align-items: center; }
+  .tc-tools input, .tc-tools select { font: inherit; font-size: var(--cds-font-size-caption); padding: var(--cds-pad-xs) var(--cds-pad-sm); border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); background: var(--color-bg); color: var(--color-fg); min-width: 0; }
+  .tc-bars { display: grid; gap: var(--cds-gap-sm); }
+  .tc-bar-row { display: grid; grid-template-columns: minmax(7rem, 11rem) 1fr; gap: var(--cds-gap-sm); align-items: center; font-size: var(--cds-font-size-caption); }
+  .tc-stack { display: flex; height: 1.25rem; border-radius: 4px; overflow: hidden; background: var(--cds-chart-grid); }
+  .tc-stack span { display: block; height: 100%; }
+  .tc-legend { display: flex; flex-wrap: wrap; gap: var(--cds-gap-md); font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
+  .tc-legend i { display: inline-block; width: .7rem; height: .7rem; border-radius: 2px; margin-right: .3rem; vertical-align: -1px; }
+  .tc-heat td.cell { text-align: center; min-width: 3.5rem; }
+  .tc-heat td.cell span { display: block; border-radius: 4px; padding: 2px 0; }
+  .tc-incell { position: relative; }
+  .tc-incell i { position: absolute; left: 0; top: 20%; bottom: 20%; background: var(--cds-chart-muted); opacity: .35; border-radius: 3px; }
+  .tc-incell span { position: relative; }
+  .tc-notes { display: grid; gap: var(--cds-gap-sm); font-size: var(--cds-font-size-body); }
+  .tc-notes ul { margin: 0; padding-left: 1.2rem; display: grid; gap: var(--cds-gap-xs); max-width: 75ch; }
+  [data-dash-source-state=refreshing] { opacity: .5; transition: opacity var(--cds-dur-slow); }
+  [data-dash-source-state=empty] { color: transparent; }
+</style>
+
+<body>
+<div class="tc">
+  <header id="top" style="display:grid;gap:var(--cds-gap-sm)">
+    <h1>Tokenizer compatibility</h1>
+    <p class="tc-lede" id="takeaway" data-source="summary by_cause">—</p>
+  </header>
+
+  <section class="tc-figs" id="figures">
+    <div class="tc-fig"><span class="tc-muted">Models checked</span><b data-source="summary" data-field="checked" class="dash-skeleton">—</b><span class="tc-muted"><span data-source="summary" data-field="distinct">—</span> distinct tokenizer files</span></div>
+    <div class="tc-fig"><span class="tc-muted">Same in transformers.js 4</span><b data-source="summary" data-field="share_same" class="dash-skeleton">—</b><span class="tc-muted">of models, on all 42 texts</span></div>
+    <div class="tc-fig"><span class="tc-muted">Same, by downloads</span><b data-source="summary" data-field="share_same_downloads" class="dash-skeleton">—</b><span class="tc-muted">share of monthly downloads</span></div>
+    <div class="tc-fig"><span class="tc-muted">Differ on everyday text</span><b data-source="summary" data-field="everyday" class="dash-skeleton">—</b><span class="tc-muted">models, in transformers.js 4</span></div>
+  </section>
+
+  <section class="tc-grid">
+    <div class="tc-card" id="by-runtime">
+      <h2>Matches Python, by runtime</h2>
+      <p class="tc-muted">Models whose ids and decoded text equal Python's on every text.</p>
+      <div class="tc-bars" data-source="by_runtime"></div>
+      <div class="tc-legend"><span><i style="background:var(--cds-chart-muted)"></i>same everywhere</span><span><i style="background:var(--cds-chart-status-critical)"></i>differs on some text</span><span><i style="background:var(--color-warn)"></i>cannot load</span></div>
+    </div>
+    <div class="tc-card" id="by-cause">
+      <h2>Why they differ</h2>
+      <p class="tc-muted">Models affected by each cause. A model can have more than one.</p>
+      <div class="tc-scroll">
+      <table data-source="by_cause" data-row-key="cause">
+        <thead><tr><th data-field="cause">Cause</th><th class="num" data-field="tj3">transformers.js 3</th><th class="num" data-field="tj4">transformers.js 4</th><th class="num" data-field="tokenizers_js">tokenizers.js</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="tc-card" id="by-text">
+    <h2>Which texts trip them up</h2>
+    <p class="tc-muted">Models that differ from Python on each text. The last column counts models where the two Python references disagree with each other on it; those are not counted as JavaScript differences.</p>
+    <div class="tc-scroll">
+      <table class="tc-heat" data-source="by_text" data-row-key="text">
+        <thead><tr><th data-field="text">Text</th><th data-field="group">Kind</th><th class="num" data-field="tj3">transformers.js 3</th><th class="num" data-field="tj4">transformers.js 4</th><th class="num" data-field="tokenizers_js">tokenizers.js</th><th class="num" data-field="disputed">Python disagrees</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="tc-card" id="models">
+    <h2>Every model</h2>
+    <div class="tc-tools">
+      <input id="tc-q" type="search" placeholder="Search models" aria-label="Search models">
+      <select id="tc-show" aria-label="Which models">
+        <option value="all">All models</option>
+        <option value="differs">Differs in any runtime</option>
+        <option value="same">Same everywhere</option>
+        <option value="unchecked">Not checked</option>
+      </select>
+      <span class="tc-muted" id="tc-count"></span>
+    </div>
+    <div class="tc-scroll">
+      <table data-source="models" data-row-key="repo" id="tc-models">
+        <thead><tr>
+          <th data-field="repo"><button data-sort="repo">Model</button></th>
+          <th class="num" data-field="downloads"><button data-sort="downloads" aria-sort="descending">Downloads</button></th>
+          <th data-field="model"><button data-sort="model">Type</button></th>
+          <th data-field="tj3"><button data-sort="tj3">transformers.js 3</button></th>
+          <th data-field="tj4"><button data-sort="tj4">transformers.js 4</button></th>
+          <th data-field="tokenizers_js"><button data-sort="tokenizers_js">tokenizers.js</button></th>
+          <th data-field="causes"><button data-sort="causes">Causes</button></th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="tc-card" id="differences">
+    <h2>Each difference</h2>
+    <p class="tc-muted">One row per tokenizer file, runtime and text, under the most-downloaded model that uses the file. Tokens are shown from the first difference on.</p>
+    <div class="tc-tools">
+      <input id="tc-dq" type="search" placeholder="Search differences" aria-label="Search differences">
+      <select id="tc-verdict" aria-label="Which differences">
+        <option value="both">JavaScript differs from Python</option>
+        <option value="disputed">Python references disagree</option>
+        <option value="all">All</option>
+      </select>
+      <span class="tc-muted" id="tc-dcount"></span>
+    </div>
+    <div class="tc-scroll">
+      <table data-source="differences" data-row-key="repo,runtime,text" id="tc-diffs">
+        <thead><tr><th data-field="repo">Model</th><th data-field="runtime">Runtime</th><th data-field="text">Text</th><th data-field="cause">Cause</th><th data-field="python">Python</th><th data-field="js">JavaScript</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="tc-card tc-notes" id="method">
+    <h2>How this was checked</h2>
+    <ul>
+      <li>The most-downloaded models on the Hugging Face Hub, taking each distinct <code>tokenizer.json</code> once (by its file hash). Models without one, and gated models, are left out.</li>
+      <li>Each tokenizer encodes 42 texts (everyday text, 15 languages and scripts, Unicode edge cases, stress cases) with special tokens added, then decodes Python's ids with special tokens skipped and clean-up off.</li>
+      <li>Python has two references: the <code>tokenizers</code> library reading the file as written, and <code>transformers</code>' AutoTokenizer, which adds model-specific behaviour. A difference counts only when JavaScript differs from both, or from the only one that can load the model. Where the two disagree with each other, JavaScript always sided with one of them.</li>
+      <li>Causes are matched from what each side produced and are best guesses. "Final sigma": lowercasing a capital Σ at the end of a word gives ς in JavaScript and σ in Python. "Whitespace": JavaScript treats U+FEFF as whitespace and U+0085 as not. "Byte fallback ignored": characters outside the vocabulary become one unknown token instead of bytes.</li>
+      <li>Run with <code>python -m tokcpu compat</code> from the <a href="https://github.com/fMindstormer/tokcpu">tokcpu repository</a> (daily, by <a href="https://github.com/fMindstormer/tokcpu/blob/main/.github/workflows/compat.yml">a workflow</a>, whenever a runtime has a new release), with <span data-source="run" data-field="runtimes">—</span>, on Node <span data-source="run" data-field="node">—</span> (V8 <span data-source="run" data-field="v8">—</span>), against Python <code>transformers</code> <span data-source="run" data-field="transformers">—</span> and <code>tokenizers</code> <span data-source="run" data-field="tokenizers">—</span>, on <span data-source="run" data-field="generated">—</span>.</li>
+    </ul>
+  </section>
+</div>
+
+<script>
+  // The few calls the page makes, over plain JSON files: calc() derives a table from others, data() reads
+  // one, onData() redraws once everything has loaded.
+  const dash = (() => {
+    const data = {}, calcs = [], subs = [];
+    const files = ['models', 'differences', 'texts', 'run'];
+    for (const id of files) data[id] = { status: 'loading' };
+    Promise.all(files.map(async (id) => {
+      try {
+        const r = await fetch(`data/${id}.json`);
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        data[id] = { status: 'ok', data: await r.json() };
+      } catch (e) { data[id] = { status: 'error', error: String(e) }; }
+    })).then(() => {
+      for (const c of calcs) {
+        const ins = c.inputs.map((i) => data[i]);
+        try { data[c.id] = ins.every((x) => x.status === 'ok') ? { status: 'ok', data: c.fn(...ins.map((x) => x.data)) } : { status: 'error' }; }
+        catch (e) { data[c.id] = { status: 'error', error: String(e) }; }
+      }
+      subs.forEach((f) => f());
+    });
+    return {
+      calc: (id, spec) => { calcs.push({ id, ...spec }); data[id] = { status: 'loading' }; },
+      data: (id) => data[id] || { status: 'loading' },
+      onData: (f) => { subs.push(f); f(); },
+    };
+  })();
+</script>
+<script>
+  const RT = [['tj3', 'transformers.js 3'], ['tj4', 'transformers.js 4'], ['tokenizers_js', 'tokenizers.js']];
+  const real = (d) => d.verdict === 'both';
+
+  dash.calc('summary', {
+    title: 'Headline figures',
+    description: 'Checked models, and how many match Python in transformers.js 4, by count and by downloads.',
+    inputs: ['models', 'differences'],
+    fn: (models, differences) => {
+      const c = models.filter((m) => m.checked);
+      const same = c.filter((m) => m.tj4 === 'same');
+      const dl = (xs) => xs.reduce((s, m) => s + m.downloads, 0);
+      const everydayFiles = new Set(differences.filter((d) => d.verdict === 'both' && d.runtime === 'tj4' && d.group === 'everyday').map((d) => d.repo));
+      const firstRepo = new Map(differences.map((d) => [d.repo, d.models]));
+      return [{
+        checked: c.length,
+        distinct: new Set(c.map((m) => m.tokenizer)).size,
+        same: same.length,
+        share_same: same.length / c.length,
+        share_same_downloads: dl(same) / dl(c),
+        everyday: [...everydayFiles].reduce((s, r) => s + firstRepo.get(r), 0),
+      }];
+    },
+  });
+
+  dash.calc('by_runtime', {
+    title: 'Models matching Python, by runtime',
+    description: 'For each JavaScript runtime, checked models that are the same everywhere, differ somewhere, or cannot load.',
+    inputs: ['models'],
+    fn: (models) => ['tj3', 'tj4', 'tokenizers_js'].map((rt) => {
+      const c = models.filter((m) => m.checked);
+      return { runtime: rt, same: c.filter((m) => m[rt] === 'same').length, differs: c.filter((m) => m[rt] === 'differs').length,
+               cannot_load: c.filter((m) => m[rt] === 'cannot load').length, checked: c.length };
+    }),
+  });
+
+  dash.calc('by_cause', {
+    title: 'Models affected, by cause',
+    description: 'Models where JavaScript differs from Python, counted per cause and runtime (each tokenizer file counts all the models that use it).',
+    inputs: ['differences', 'models'],
+    fn: (differences, models) => {
+      const out = new Map();
+      const add = (cause, rt, file, n) => {
+        if (!out.has(cause)) out.set(cause, { cause, tj3: new Map(), tj4: new Map(), tokenizers_js: new Map() });
+        out.get(cause)[rt].set(file, n);
+      };
+      for (const d of differences) if (d.verdict === 'both') add(d.cause, d.runtime, d.repo, d.models);
+      for (const m of models) for (const rt of ['tj3', 'tj4', 'tokenizers_js']) if (m.checked && m[rt] === 'cannot load') add('cannot load', rt, m.repo, 1);
+      const sum = (mp) => [...mp.values()].reduce((s, n) => s + n, 0);
+      return [...out.values()].map((r) => ({ cause: r.cause, tj3: sum(r.tj3), tj4: sum(r.tj4), tokenizers_js: sum(r.tokenizers_js) }))
+        .sort((a, b) => b.tj4 - a.tj4 || b.tj3 - a.tj3);
+    },
+  });
+
+  dash.calc('by_text', {
+    title: 'Models differing, by text',
+    description: 'For each test text, models where each runtime differs from Python, and models where the Python references disagree.',
+    inputs: ['texts', 'differences'],
+    fn: (texts, differences) => texts.map((t) => {
+      const on = differences.filter((d) => d.text === t.text);
+      const count = (xs) => xs.reduce((s, d) => s + d.models, 0);
+      const disputed = new Map(on.filter((d) => d.verdict !== 'both').map((d) => [d.repo, d.models]));
+      return { text: t.text, group: t.group, content: t.content,
+               tj3: count(on.filter((d) => d.verdict === 'both' && d.runtime === 'tj3')),
+               tj4: count(on.filter((d) => d.verdict === 'both' && d.runtime === 'tj4')),
+               tokenizers_js: count(on.filter((d) => d.verdict === 'both' && d.runtime === 'tokenizers_js')),
+               disputed: [...disputed.values()].reduce((s, n) => s + n, 0) };
+    }),
+  });
+
+  const fmt = d3.format(',');
+  const pct = d3.format('.1%');
+  const compact = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
+  const ok = (id) => dash.data(id).status === 'ok';
+  const rows = (id) => (ok(id) ? dash.data(id).data : []);
+  const el = (tag, attrs = {}, text) => { const e = document.createElement(tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); if (text != null) e.textContent = text; return e; };
+  const failed = (box) => { box.replaceChildren(el('span', { class: 'tc-muted' }, 'Failed to load')); };
+
+  // Headline figures and the takeaway
+  dash.onData(() => {
+    const s = rows('summary')[0];
+    document.querySelectorAll('[data-source="summary"][data-field]').forEach((n) => {
+      if (!s) { n.textContent = '—'; return; }
+      n.classList.remove('dash-skeleton');
+      const f = n.dataset.field, v = s[f];
+      n.textContent = f.startsWith('share') ? pct(v) : fmt(v);
+    });
+    const r = rows('run')[0];
+    document.querySelectorAll('[data-source="run"][data-field]').forEach((n) => { n.textContent = r ? String(r[n.dataset.field]) : '—'; });
+    const t = document.getElementById('takeaway');
+    const causes = rows('by_cause').filter((c) => c.tj4 > 0);
+    if (!s || !ok('by_cause')) { t.textContent = '—'; return; }
+    const top = causes[0];
+    t.textContent = `${fmt(s.same)} of ${fmt(s.checked)} popular models tokenize all 42 texts exactly as Python does in transformers.js 4.`
+      + (top ? ` The rest differ on rare characters, most often from ${top.cause.replace(/ \(.*\)/, '').toLowerCase()} (${fmt(top.tj4)} models).` : '');
+  });
+
+  // Runtime bars
+  dash.onData(() => {
+    const box = document.querySelector('#by-runtime .tc-bars');
+    const st = dash.data('by_runtime').status;
+    if (st === 'error') return failed(box);
+    if (st !== 'ok') { box.replaceChildren(); return; }
+    box.replaceChildren(...rows('by_runtime').map((r) => {
+      const row = el('div', { class: 'tc-bar-row' });
+      const label = el('span', {}, RT.find((x) => x[0] === r.runtime)[1]);
+      const stack = el('div', { class: 'tc-stack', role: 'img', 'aria-label': `${fmt(r.same)} same, ${fmt(r.differs)} differ, ${fmt(r.cannot_load)} cannot load` });
+      for (const [k, color] of [['same', 'var(--cds-chart-muted)'], ['differs', 'var(--cds-chart-status-critical)'], ['cannot_load', 'var(--color-warn)']]) {
+        if (!r[k]) continue;
+        const seg = el('span', { title: '' });
+        seg.style.width = (100 * r[k] / r.checked) + '%';
+        seg.style.background = color;
+        stack.append(seg);
+      }
+      const nums = el('span', { class: 'tc-muted' }, `${fmt(r.same)} same · ${fmt(r.differs)} differ` + (r.cannot_load ? ` · ${fmt(r.cannot_load)} cannot load` : ''));
+      const right = el('div', { style: 'display:grid;gap:4px' });
+      right.append(stack, nums);
+      row.append(label, right);
+      return row;
+    }));
+  });
+
+  // Causes table, with in-cell bars on one scale
+  dash.onData(() => {
+    const body = document.querySelector('#by-cause tbody');
+    if (!ok('by_cause')) { body.replaceChildren(); return; }
+    const rs = rows('by_cause');
+    const max = d3.max(rs, (r) => Math.max(r.tj3, r.tj4, r.tokenizers_js)) || 1;
+    body.replaceChildren(...rs.map((r) => {
+      const tr = el('tr');
+      tr.append(el('td', {}, r.cause));
+      for (const k of ['tj3', 'tj4', 'tokenizers_js']) {
+        const td = el('td', { class: 'num tc-incell' });
+        const bar = el('i'); bar.style.width = (100 * r[k] / max) + '%';
+        td.append(bar, el('span', {}, fmt(r[k])));
+        tr.append(td);
+      }
+      return tr;
+    }));
+  });
+
+  // Texts heat table
+  dash.onData(() => {
+    const body = document.querySelector('#by-text tbody');
+    if (!ok('by_text')) { body.replaceChildren(); return; }
+    const rs = rows('by_text');
+    const max = d3.max(rs, (r) => Math.max(r.tj3, r.tj4, r.tokenizers_js, r.disputed)) || 1;
+    const shade = (v, color) => { const s = el('span', {}, v ? fmt(v) : '·'); if (v) s.style.background = `color-mix(in srgb, ${color} ${Math.round(12 + 60 * v / max)}%, transparent)`; return s; };
+    body.replaceChildren(...rs.map((r) => {
+      const tr = el('tr', { title: r.content });
+      tr.append(el('td', {}, r.text), el('td', { class: 'tc-muted' }, r.group));
+      for (const k of ['tj3', 'tj4', 'tokenizers_js']) { const td = el('td', { class: 'num cell' }); td.append(shade(r[k], 'var(--cds-chart-status-critical)')); tr.append(td); }
+      const td = el('td', { class: 'num cell' }); td.append(shade(r.disputed, 'var(--cds-chart-muted)')); tr.append(td);
+      return tr;
+    }));
+  });
+
+  // Models table: search, filter, sort
+  const sortState = { key: 'downloads', dir: -1 };
+  const pill = (v) => el('span', { class: 'tc-pill ' + (v === 'same' ? 'same' : v === 'differs' ? 'differs' : 'cannot') }, v == null ? '' : v);
+  const drawModels = () => {
+    const body = document.querySelector('#tc-models tbody');
+    if (!ok('models')) { body.replaceChildren(); return; }
+    const q = document.getElementById('tc-q').value.trim().toLowerCase();
+    const show = document.getElementById('tc-show').value;
+    const differs = (m) => RT.some(([k]) => m[k] && m[k] !== 'same');
+    const rs = rows('models').filter((m) => (!q || (m.repo + ' ' + (m.model || '') + ' ' + (m.causes || '')).toLowerCase().includes(q))
+      && (show === 'all' || (show === 'unchecked' ? !m.checked : m.checked && (show === 'differs' ? differs(m) : !differs(m)))));
+    const { key, dir } = sortState;
+    rs.sort((a, b) => { const x = a[key] ?? '', y = b[key] ?? ''; return (typeof x === 'number' && typeof y === 'number' ? x - y : String(x).localeCompare(String(y))) * dir; });
+    document.getElementById('tc-count').textContent = `${fmt(rs.length)} shown`;
+    body.replaceChildren(...rs.map((m) => {
+      const tr = el('tr');
+      tr.append(el('td', {}, m.repo), el('td', { class: 'num' }, compact.format(m.downloads)), el('td', {}, m.checked ? m.model : ''));
+      for (const [k] of RT) { const td = el('td'); if (m.checked) td.append(pill(m[k])); tr.append(td); }
+      tr.append(el('td', { class: 'tc-muted' }, m.checked ? m.causes : m.note));
+      return tr;
+    }));
+    document.querySelectorAll('#tc-models th button').forEach((b) => {
+      if (b.dataset.sort === key) b.setAttribute('aria-sort', dir > 0 ? 'ascending' : 'descending'); else b.removeAttribute('aria-sort');
+    });
+  };
+  document.querySelectorAll('#tc-models th button').forEach((b) => b.addEventListener('click', () => {
+    const k = b.dataset.sort;
+    sortState.dir = sortState.key === k ? -sortState.dir : (k === 'downloads' ? -1 : 1);
+    sortState.key = k;
+    drawModels();
+  }));
+  document.getElementById('tc-q').addEventListener('input', drawModels);
+  document.getElementById('tc-show').addEventListener('change', drawModels);
+  dash.onData(drawModels);
+
+  // Differences table
+  const drawDiffs = () => {
+    const body = document.querySelector('#tc-diffs tbody');
+    if (!ok('differences')) { body.replaceChildren(); return; }
+    const q = document.getElementById('tc-dq').value.trim().toLowerCase();
+    const v = document.getElementById('tc-verdict').value;
+    const rs = rows('differences').filter((d) => (v === 'all' || (v === 'both') === real(d))
+      && (!q || [d.repo, d.runtime, d.text, d.cause].join(' ').toLowerCase().includes(q)))
+      .sort((a, b) => b.downloads - a.downloads || a.text.localeCompare(b.text));
+    document.getElementById('tc-dcount').textContent = `${fmt(rs.length)} shown`;
+    body.replaceChildren(...rs.slice(0, 600).map((d) => {
+      const tr = el('tr');
+      tr.append(el('td', {}, d.repo), el('td', {}, d.runtime), el('td', {}, d.text),
+        el('td', { class: 'tc-muted' }, d.cause + (real(d) ? '' : ` (vs ${d.verdict} only)`)));
+      const a = el('td'); a.append(el('code', {}, d.python));
+      const b = el('td'); b.append(el('code', {}, d.js));
+      tr.append(a, b);
+      return tr;
+    }));
+  };
+  document.getElementById('tc-dq').addEventListener('input', drawDiffs);
+  document.getElementById('tc-verdict').addEventListener('change', drawDiffs);
+  dash.onData(drawDiffs);
+</script>
+</body>
+</html>

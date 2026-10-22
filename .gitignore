@@ -12,3 +12,4 @@ web/tok/*/tokenizer.json
 
 # `python -m tokcpu hub` stages the Hub upload here
 build/
+web/compat/data/
