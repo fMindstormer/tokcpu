@@ -363,11 +363,20 @@ retrieves better with transformers.js's ids, and this is not an accident:
   exactly the ids of the same text as written. Python's tokenizer never does.
 - The Rust library lowercases each character on its own, so an uncased model reading Python's ids sees σ
   where the language has ς.
+- Google's original BERT tokenizer lowercases each word with `str.lower()`
+  ([tokenization.py](https://github.com/google-research/bert/blob/eedf5716ce1268e56f0a50264a88cafad334ac61/tokenization.py#L213)).
+  On Python 3 it gives transformers.js's ids for all 2,776 Belebele texts, for all three models. The older
+  Python tokenizer in transformers v4 (`use_fast=False`) runs the same code but first lowercases the text
+  one character at a time
+  ([tokenization_utils.py](https://github.com/huggingface/transformers/blob/v4.57.6/src/transformers/tokenization_utils.py#L652-L653)),
+  so it gives the Rust library's ids for every text.
 - As a result, Python's accuracy falls from 31.9% to 23.3% when the question is typed in capitals, while
   transformers.js's stays at 31.9%. In 416 questions the gold passage ranks higher with transformers.js's
   ids, and in 105 lower.
 
-Here, the reference implementation is the one that hurts the model.
+Here, the reference implementation is the one that hurts the model, and it is also the one that departs
+from the code BERT was released with. Google's code also ran on Python 2, where lowercasing gives σ, so
+the code alone cannot say which the models were trained on.
 
 The experiment needs `pip install torch matplotlib pyarrow`. It takes about 15 minutes on a laptop CPU and
 writes [`effect/summary.md`](effect/summary.md) and the figure. The paired dataset,
