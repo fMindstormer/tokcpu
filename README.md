@@ -26,7 +26,15 @@ written there too:
 tape in its `start.txt`.
 
 **Interactive page:** https://fmindstormer.github.io/tokcpu/ runs these same files in the browser with
-transformers.js, and compiles Turing machines you type into new tokenizers you can download.
+transformers.js, and compiles Turing machines you type into new tokenizers you can download. It starts
+with a 16-rule machine that adds one to a binary number, one step per click.
+
+**What it found:** because the machines say what every tick must give, they test the runtimes that read
+`tokenizer.json`. For 84 of the 500 most-downloaded Hub models that have one, the browser lowercases a
+word-final capital Σ to ς and Python to σ, so `ΟΔΟΣ` gets different ids. With mBERT, Greek questions
+typed in capitals then find the right passage first 23.3% of the time from Python's ids and 31.9% from
+the browser's ([the experiment](#does-a-disagreement-change-what-the-model-does)). Every other
+difference is on the [dashboard](https://fmindstormer.github.io/tokcpu/compat/).
 
 ## How one tick works
 
@@ -485,7 +493,7 @@ uploads it.
 ```
 tokcpu/machine.py     the machine model: one head on a string tape, two-character windows, rules
 tokcpu/compile.py     machine -> tokenizer.json (BPE merges, added tokens, the tag-deleting decoder)
-tokcpu/small.py       rung 1: a binary counter, the 4-state busy beaver, any Turing machine table
+tokcpu/small.py       rung 1: a binary counter, the 4-state busy beaver, binary increment (the page's guided step), any table
 tokcpu/bf.py          rungs 2 and 3: the Brainfuck compiler, the universal interpreter, a reference interpreter
 tokcpu/blocks.py      parallel ticks: a block cellular automaton, and the sorter
 tokcpu/elementary.py  the 256 elementary cellular automata, Rule 110 among them, as block automata

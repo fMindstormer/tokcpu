@@ -373,6 +373,10 @@
     }));
   });
 
+  // ?q= opens both tables already searched, e.g. ?q=final%20sigma from the main page
+  const asked = new URLSearchParams(location.search).get('q');
+  if (asked) document.getElementById('tc-q').value = document.getElementById('tc-dq').value = asked;
+
   // Models table: search, filter, sort
   const sortState = { key: 'downloads', dir: -1 };
   const pill = (v) => el('span', { class: 'tc-pill ' + (v === 'same' ? 'same' : v === 'differs' ? 'differs' : 'cannot') }, v == null ? '' : v);

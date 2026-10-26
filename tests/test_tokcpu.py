@@ -112,6 +112,21 @@ def test_elementary_automata():
         elementary.automaton(110, "011")
 
 
+def test_increment_adds_one():
+    """The page's guided example: 1011 becomes 1100 in 8 ticks, and every number gets one added."""
+    m, start = small.turing(small.INCREMENT, "increment", blank="_")
+    tok = tok_of(m)
+    for x in range(64):
+        bits = format(x, "b")
+        end, n = run_checked(m, tok, start[:-1] + bits + start[-1])
+        assert int("".join(c for c in end if c in "01"), 2) == x + 1
+        if bits == "1011":
+            assert n == 8
+    page = (ROOT / "web" / "index.html").read_text()
+    lines = page.split("const GUIDE = `")[1].split("`")[0].split("\n")
+    assert {(q, a): (b, d, n) for q, a, b, d, n in map(str.split, lines)} == small.INCREMENT
+
+
 def test_counter_counts():
     m, tape = small.counter()
     tok = tok_of(m)
@@ -196,7 +211,7 @@ def test_page_compiler_matches(tmp_path):
     if not shutil.which("node"):
         pytest.skip("node not installed")
     rng = random.Random(1)
-    tables = [(small.BUSY_BEAVER_4, "0")]
+    tables = [(small.BUSY_BEAVER_4, "0"), (small.INCREMENT, "_")]
     for _ in range(20):
         syms, states = rng.sample('01#$x"\\ab', 4), "ABCD"
         table = {(q, a): (rng.choice(syms), rng.choice("RLS"), rng.choice(states + "H"))

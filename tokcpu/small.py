@@ -29,6 +29,13 @@ BUSY_BEAVER_4 = {   # Brady's 4-state, 2-symbol champion: 107 steps, 13 ones
     ("D", "0"): ("1", "R", "D"), ("D", "1"): ("0", "R", "A"),
 }
 
+INCREMENT = {       # adds one to a binary number, with blank _: the page's guided example
+    ("A", "0"): ("0", "R", "A"), ("A", "1"): ("1", "R", "A"),     # A walks to the end of the number
+    ("A", "_"): ("_", "L", "B"),                                  # and turns back as B
+    ("B", "1"): ("0", "L", "B"),                                  # B carries: 1 becomes 0
+    ("B", "0"): ("1", "S", "C"), ("B", "_"): ("1", "S", "C"),     # 0 or a blank becomes 1, and C halts
+}
+
 
 def turing(table: dict, name: str, start: str = "A", blank: str = "0") -> tuple[Machine, str]:
     """Any Turing machine given as {(state, read): (write, move, next)}; a state without rules halts."""

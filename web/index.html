@@ -108,6 +108,68 @@ input[type="text"] { flex: 1; min-width: 0; font: 0.8rem var(--mono); color: var
 #ca-tape .c.edge { background: var(--chip-edge); color: var(--muted); }
 #ca-tape .c.mid { background: var(--chip-out); }
 #ca input[type="checkbox"] { accent-color: var(--head); vertical-align: -2px; }
+.nav { display: flex; flex-wrap: wrap; gap: 0.3rem 1.4rem; font-size: 0.95rem; }
+.nav a { color: var(--ink); text-underline-offset: 3px; }
+.nav b { font: 600 0.7rem var(--mono); color: var(--head); margin-right: 0.35em; }
+.lead { max-width: 46rem; margin-bottom: 0.8rem; }
+
+/* the guided step: one tick at a time, with the boundary between the tokenizer and the loop beside it */
+.guide { grid-template-columns: minmax(0, 1fr) minmax(0, 19rem); align-items: start; }
+@media (max-width: 860px) { .guide { grid-template-columns: minmax(0, 1fr); } }
+.guide > div { display: grid; gap: 1rem; min-width: 0; }
+.kicker { font: 600 0.7rem var(--mono); color: var(--head); letter-spacing: 0.06em; text-transform: uppercase; }
+.stage { display: grid; gap: 0.4rem; }
+.stage p { font-size: 0.92rem; }
+.stage b { font-family: var(--mono); font-weight: 600; font-size: 0.9em; }
+input[type="text"].num { flex: 0 0 7rem; }
+#g-enc, #g-dec { min-height: 3.3rem; }
+.tape.ids .c { flex-direction: column; height: auto; padding: 0.3em 0.4em 0.25em; gap: 0.2em; }
+.tape .c small { font: 0.58rem/1 var(--mono); color: var(--muted); }
+.tape .c.rule { background: var(--head); color: var(--head-ink); font-weight: 600; }
+.tape .c.rule small { color: inherit; opacity: 0.85; }
+.tape .c.wrote { background: var(--chip-out); box-shadow: inset 0 0 0 2px var(--head); font-weight: 600; }
+.tape .c .hd { color: var(--head); }
+.tape .c.marker { background: var(--chip-ptr); }
+.trace { font: 0.8rem/1.75 var(--mono); display: grid; overflow-x: auto; }
+.trace span { white-space: pre; color: var(--muted); }
+.trace span.now { color: var(--ink); font-weight: 600; }
+.trace mark { background: var(--chip-out); color: inherit; border-radius: 3px; box-shadow: inset 0 -2px 0 var(--head); }
+.trace i { font-style: normal; display: inline-block; width: 2.2em; color: var(--muted); font-weight: 400; }
+.side { background: var(--code-bg); border: 1px solid var(--line); border-radius: 10px; padding: 1rem; display: grid; gap: 0.8rem; }
+.side p { font-size: 0.88rem; }
+.code { font: 0.72rem/1.75 var(--mono); overflow-x: auto; background: var(--sheet); border: 1px solid var(--line); border-radius: 8px; padding: 0.5rem 0; }
+.code span { display: block; white-space: pre; padding: 0 0.7rem; border-left: 4px solid transparent; }
+.code .tk { border-left-color: var(--head); background: var(--chip-out); }
+.code .lp { border-left-color: var(--line); }
+.code .on { font-weight: 600; }
+.code .lp.on { border-left-color: var(--ink); }
+.key { display: grid; gap: 0.35rem; font-size: 0.84rem; }
+.key span::before { content: ""; display: inline-block; width: 0.8em; height: 0.8em; border-radius: 2px; margin-right: 0.5em; vertical-align: -1px; }
+.key .tk::before { background: var(--head); }
+.key .lp::before { background: var(--line); border: 1px solid var(--muted); }
+.calls { font-size: 0.84rem; color: var(--muted); }
+.calls b { color: var(--ink); font-variant-numeric: tabular-nums; }
+@keyframes pop { from { transform: translateY(-3px); opacity: 0.4; } }
+.tape .c.wrote, .tape .c.rule { animation: pop 0.35s ease-out; }
+@media (prefers-reduced-motion: reduce) { .tape .c.wrote, .tape .c.rule { animation: none; } }
+
+/* the case study */
+.case { background: var(--sheet); border: 1px solid var(--line); border-radius: 14px; padding: 1.3rem; display: grid; gap: 1.1rem; }
+.case-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 330px), 1fr)); gap: 1.2rem; }
+.case-grid > div { display: grid; gap: 0.6rem; align-content: start; min-width: 0; }
+.word { font: 700 2.2rem/1 var(--display); letter-spacing: 0.04em; }
+.versus { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0.5rem 0.8rem; align-items: center; font-size: 0.88rem; }
+.versus .tape { min-height: 0; padding: 0.4rem; }
+.versus .who { font-weight: 600; }
+.versus .who small { display: block; font-weight: 400; color: var(--muted); font-size: 0.75rem; }
+.tape .c.bad { background: var(--chip-ptr); }
+.case table { min-width: 0; width: 100%; }
+.case p { max-width: 44rem; }
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 0.8rem; }
+.facts div { border-top: 2px solid var(--line); padding-top: 0.5rem; font-size: 0.88rem; }
+.facts b { display: block; font: 700 1.35rem/1.15 var(--display); font-variant-numeric: tabular-nums; }
+.links { display: flex; flex-wrap: wrap; gap: 0.4rem 1.3rem; font-size: 0.92rem; }
+#sig-live { font: 0.8rem/1.6 var(--mono); }
 
 /* the write-up */
 main.wrap { display: grid; gap: 2.6rem; padding-block: 2.4rem 3.5rem; }
@@ -133,13 +195,68 @@ footer.wrap { padding-block: 1.5rem 3rem; color: var(--muted); font-size: 0.85re
 <header class="wrap">
   <p class="eyebrow">A stock Hugging Face tokenizer, used as a computer</p>
   <h1>Tokenizer CPU</h1>
-  <p class="lede">This tokenizer runs Brainfuck. It is a plain <code>tokenizer.json</code>: no custom code, no model. Every clock tick is one call to encode and one to decode:</p>
+  <p class="lede">This tokenizer runs Brainfuck. It is a plain <code>tokenizer.json</code>: no custom code, no model. One call to encode and one to decode carry out one step of a program; a loop around them repeats it:</p>
   <div class="loop">tok = AutoTokenizer.from_pretrained("tokenizers/brainfuck")
 while (nxt := <b>tok.decode(tok.encode(tape))</b>) != tape:
     tape = nxt</div>
+  <nav class="nav" aria-label="On this page">
+    <a href="#guide"><b>1</b>Watch one step</a>
+    <a href="#machines-intro"><b>2</b>Run the big machines</a>
+    <a href="#finding"><b>3</b>What it found in real models</a>
+  </nav>
 </header>
 
 <div class="wrap">
+  <div class="bench guide" id="guide">
+    <div>
+      <div class="stage">
+        <h2>Watch one step</h2>
+        <p>A tokenizer of <span id="g-rules">16</span> merge rules adds one to a binary number. Each press of <i>Next step</i> is one encode and one decode.</p>
+      </div>
+      <div class="row">
+        <label class="small" for="g-num">Number</label>
+        <input type="text" class="num" id="g-num" value="1011" maxlength="8" inputmode="numeric" spellcheck="false" autocomplete="off" aria-describedby="g-num-note">
+        <span class="small" id="g-num-note">in binary, up to 8 digits</span>
+      </div>
+      <div class="row">
+        <button class="act" id="g-next">Next step</button>
+        <button class="act ghost" id="g-play">Play</button>
+        <button class="act ghost" id="g-restart">Restart</button>
+        <span class="status" id="g-status">loading transformers.js…</span>
+      </div>
+      <div class="stage">
+        <span class="kicker">1 · encode</span>
+        <p id="g-enc-note">The tape is a string. Encoding splits it into tokens, each with an id; the head and the cell it reads become one token.</p>
+        <div class="tape ids" id="g-enc" aria-live="off"></div>
+      </div>
+      <div class="stage">
+        <span class="kicker">2 · the id is the rule</span>
+        <p id="g-rule">Press <i>Next step</i>.</p>
+      </div>
+      <div class="stage">
+        <span class="kicker">3 · decode</span>
+        <p id="g-dec-note">Decoding prints each id's text. Every character prints itself; the rule's id prints the rule's output.</p>
+        <div class="tape ids" id="g-dec" aria-live="off"></div>
+      </div>
+      <div class="stage">
+        <span class="kicker">The tape after each step</span>
+        <div class="trace" id="g-trace" aria-live="polite"></div>
+        <p class="small">The heads: <code>ⓐ</code> is state A, which reads the cell on its right; <code>Ⓑ</code> is state B, which reads the cell on its left; <code>Ⓒ</code> is state C, which has no rules. <code>_</code> is a blank cell.</p>
+      </div>
+    </div>
+    <aside class="side" aria-label="What the tokenizer does, and what the loop does">
+      <span class="kicker">Where the tokenizer stops</span>
+      <div class="code" id="g-code"><span class="lp" data-l="init">tape = "⊢ⓐ1011⊣"</span><span class="lp" data-l="while">while True:</span><span class="tk" data-l="enc">    ids = tok.encode(tape)</span><span class="tk" data-l="dec">    nxt = tok.decode(ids)</span><span class="lp" data-l="stop">    if nxt == tape: break</span><span class="lp" data-l="next">    tape = nxt</span></div>
+      <div class="key"><span class="tk">The tokenizer: one transition</span><span class="lp">The loop around it: repetition</span></div>
+      <p>The orange lines are all the tokenizer does: one encode and one decode, which apply exactly one rule. It keeps nothing between calls. The whole state of the computation is the string.</p>
+      <p>Everything else is ordinary code, the same for every machine: feed the output back in, and stop when it stops changing. The tokenizer never loops by itself. Without this loop, every machine on this page takes one step.</p>
+      <p class="calls" id="g-calls"></p>
+    </aside>
+  </div>
+</div>
+
+<div class="wrap">
+  <p class="lead" id="machines-intro">The same loop runs bigger machines. The universal one below reads a Brainfuck program from its tape; Hello World takes 154,137 steps.</p>
   <div class="bench" id="bench">
     <div class="row">
       <div class="seg" role="group" aria-label="Machine" id="machines"></div>
@@ -204,6 +321,55 @@ while (nxt := <b>tok.decode(tok.encode(tape))</b>) != tape:
 </div>
 
 <main class="wrap">
+  <div class="case" id="finding">
+    <div class="stage">
+      <span class="kicker">What building it found</span>
+      <h2>The same tokenizer file gives a browser and Python different ids</h2>
+    </div>
+    <p>A program that runs for 150,000 ticks goes wrong if a single id is wrong, and the machine's own rules say what every tick must give, without asking any tokenizer library. So the machines became a test of the runtimes that read <code>tokenizer.json</code>: the Rust library behind Python's <code>transformers</code>, and the JavaScript ports that run models in web pages. The same checks then ran on the most-downloaded models on the Hugging Face Hub. This is the difference that reaches the most of them.</p>
+    <div class="case-grid">
+      <div>
+        <span class="kicker">The smallest input</span>
+        <p><span class="word" lang="el">ΟΔΟΣ</span></p>
+        <p>"Street" in capitals, as on a sign, through the tokenizer of <a href="https://huggingface.co/google-bert/bert-base-multilingual-uncased">bert-base-multilingual-uncased</a> (mBERT), which lowercases text before splitting it.</p>
+        <div class="versus">
+          <span class="who">Python<small>lowercases to <span lang="el">οδοσ</span></small></span>
+          <div class="tape ids" lang="el"><span class="c">ο<small>295</small></span><span class="c bad">##δο<small>37187</small></span><span class="c bad">##σ<small>62591</small></span></div>
+          <span class="who">Browser<small>lowercases to <span lang="el">οδος</span></small></span>
+          <div class="tape ids" lang="el"><span class="c">ο<small>295</small></span><span class="c cell">##δος<small>42501</small></span></div>
+        </div>
+        <p>JavaScript's <code>toLowerCase</code> follows Unicode: a capital Σ that ends a word becomes ς. The Rust library lowercases one character at a time, so it becomes σ, which Greek never writes at the end of a word. The browser's ids are exactly those of the word typed in lowercase; Python's are not. Python's own <code>"ΟΔΟΣ".lower()</code> gives ς, and so does the tokenizer Google released BERT with, run on Python 3.</p>
+        <p class="small">This browser lowercases it to <b id="sig-lower" lang="el">…</b>. <button class="act ghost" id="sig-run">Tokenize it here</button> <span id="sig-live" aria-live="polite"></span></p>
+      </div>
+      <div>
+        <span class="kicker">What it does to search</span>
+        <p>Search over Greek text with an index built in Python and questions tokenized in the browser. 900 questions from <a href="https://huggingface.co/datasets/facebook/belebele">Belebele</a>, typed in capitals, each looking for its passage among 488. The same weights and the same code embed both sides; only the ids differ.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Model</th><th>Top passage changes</th><th>Found first, Python</th><th>Found first, browser</th></tr></thead>
+          <tbody>
+            <tr><td>all-MiniLM-L6-v2</td><td class="num">12%</td><td class="num">2.1%</td><td class="num">2.2%</td></tr>
+            <tr><td>bge-small-en-v1.5</td><td class="num">18%</td><td class="num">9.0%</td><td class="num">9.4%</td></tr>
+            <tr><td>mBERT</td><td class="num">44%</td><td class="num">23.3%</td><td class="num">31.9%</td></tr>
+          </tbody>
+        </table></div>
+        <p>Typed normally, mBERT finds the right passage first for 31.9% of the questions in both runtimes. In capitals, the browser keeps 31.9%; Python drops to 23.3%. The two English models barely read Greek, so for them the rankings reshuffle without getting better or worse.</p>
+      </div>
+    </div>
+    <div class="facts">
+      <div><b>84 of 500</b>top Hub models with a <code>tokenizer.json</code> differ this way: BERT-style models such as <code>bert-base-uncased</code>, all-MiniLM, BGE and E5, and CLIP</div>
+      <div><b>1 in 900</b>questions as written differ: edited prose rarely ends a word in capital Σ</div>
+      <div><b>16%</b>of 5,000 Greek web pages differ somewhere, from headlines, menus and names in capitals</div>
+    </div>
+    <p><b>If you use these models:</b> embed your documents and your queries with the same runtime, or check that the two agree on your text. <code>python -m tokcpu check your/model</code> lists every text on which the JavaScript runtimes differ from Python. Which lowercasing mBERT was trained with is not certain, since Google's code also ran on Python 2, which gives σ; but the browser's version is the one that matches the word written normally.</p>
+    <p class="small">Tested in October 2026: transformers.js 3.7.6 and 4.3.1 and tokenizers.js 0.2.0 on Node 22, against <code>tokenizers</code> 0.23.3 and <code>transformers</code> 5.20.2. The search experiment used transformers.js 4.3.1's ids, and PyTorch for every embedding.</p>
+    <div class="links">
+      <a href="https://github.com/fMindstormer/tokcpu#does-a-disagreement-change-what-the-model-does">The full experiment and method</a>
+      <a href="https://github.com/fMindstormer/tokcpu/blob/main/effect/summary.md">Every number</a>
+      <a href="compat/?q=final%20sigma">The 84 models</a>
+      <a href="compat/">All 500 models and every other difference</a>
+    </div>
+  </div>
+
   <section>
     <h2>One tick</h2>
     <p>The tape is a string. Exactly one character on it is the <b>head</b>: a marker that stands for a machine state and reads the character beside it. The tokenizer has one merge rule for every pair the head can form with a cell, and no other merges.</p>
@@ -306,14 +472,16 @@ python -m tokcpu run tokenizers/brainfuck programs/hello.bf --auto
 python -m tokcpu run tokenizers/brainfuck programs/reverse.bf --input stressed
 python -m tokcpu run tokenizers/4-state-busy-beaver --show 1
 python -m tokcpu run tokenizers/sort --show 2
-python -m tokcpu ca tokenizers/rule110 --gens 24</pre>
-    <p>The tokenizer folders load with <code>AutoTokenizer.from_pretrained</code>, so they can go on the Hugging Face Hub like any other.</p>
+python -m tokcpu ca tokenizers/rule110 --gens 24
+python -m tokcpu check google-bert/bert-base-multilingual-uncased   # after cd fuzz && npm install</pre>
+    <p>The tokenizer folders load with <code>AutoTokenizer.from_pretrained</code>, so they can go on the Hugging Face Hub like any other. <code>check</code> compares any Hub model's tokenizer, or a folder holding one, across Python and the JavaScript runtimes.</p>
   </section>
 </main>
 <footer class="wrap">This page loads <code>tokenizer.json</code> files and runs them with transformers.js 3.7.6, the JavaScript port of Hugging Face Transformers. The labels on the head chip come from a small side file that names each state; the tokenizer itself does all the work.</footer>
 
 <script type="module">
 import { parseTable, turing, spec, stringify, CONFIG, automaton, generation, caTable, ETHER, COLLISION } from "./tokcpu.js";
+const TJS = "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.6/dist/transformers.min.js";
 const $ = (id) => document.getElementById(id);
 const LEFT = "⊢", RIGHT = "⊣", OUT_END = "┃", PROG_END = "║", IP = "▼", DP = "▲";
 const HALF = "⓪①②③④⑤⑥⑦⑧⑨ⓐⓑⓒⓓⓔⓕ";   // a printed byte's high nibble, waiting for its low one
@@ -765,14 +933,163 @@ function caSetup() {
   caReset();
 }
 
+// ---- the guided step: one tick at a time, on a machine that adds one to a binary number ----
+const GUIDE = `A 0 0 R A
+A 1 1 R A
+A _ _ L B
+B 1 0 L B
+B 0 1 S C
+B _ 1 S C`;                  // INCREMENT in tokcpu/small.py
+const JOBS = { A: "walk to the end", B: "carry the one", C: "done" };
+let g = null, gTimer = 0;
+
+function gChip(text, cls, id) {
+  const s = document.createElement("span");
+  s.className = "c " + cls;
+  s.append(text);
+  if (id !== undefined) { const k = document.createElement("small"); k.textContent = id; s.append(k); }
+  return s;
+}
+function gClass(t) {
+  if (t === LEFT || t === RIGHT) return "edge";
+  if (g.m.markerOf[t]) return "marker";
+  return "cell";
+}
+function gHead(text) {          // the output of a rule, with its head character marked
+  const f = document.createDocumentFragment();
+  for (const c of text) {
+    if (g.m.markerOf[c]) { const h = document.createElement("span"); h.className = "hd"; h.textContent = c; f.append(h); }
+    else f.append(c);
+  }
+  return f;
+}
+function gNumber(t) { return Array.from(t).filter((c) => c === "0" || c === "1").join(""); }
+function gGuideStatus(msg, cls = "") { const s = $("g-status"); s.textContent = msg; s.className = "status " + cls; }
+function gLines(on) {
+  for (const l of $("g-code").children) l.classList.toggle("on", on.includes(l.dataset.l));
+}
+
+function gReset() {
+  clearInterval(gTimer); gTimer = 0; $("g-play").textContent = "Play";
+  const num = $("g-num").value.trim();
+  if (!/^[01]{1,8}$/.test(num)) { gGuideStatus("a binary number: 0s and 1s, up to 8 digits", "err"); return; }
+  const tape = g.m.start.slice(0, -1) + num + RIGHT;
+  Object.assign(g, { tape, num, trace: [[tape, 0, 0]], calls: 0, halted: false });
+  $("g-code").firstChild.textContent = `tape = "${tape}"`;
+  $("g-enc").replaceChildren(...Array.from(tape, (c) => gChip(c, gClass(c))));
+  $("g-enc-note").textContent = "The tape is a string. Encoding splits it into tokens, each with an id; the head and the cell it reads become one token.";
+  $("g-rule").innerHTML = "Press <i>Next step</i> to encode this tape.";
+  $("g-dec").replaceChildren();
+  gLines(["init"]);
+  gGuideStatus("ready");
+  gRender();
+}
+
+function gStep() {
+  if (g.halted) return;
+  const before = g.tape, toks = g.tok.tokenize(before);
+  const ids = g.tok.encode(before, { add_special_tokens: false });
+  const after = tick(g.tok, before);
+  g.calls++;
+  const k = toks.findIndex((t) => Array.from(t).length === 2);
+  $("g-enc").replaceChildren(...toks.map((t, i) => gChip(t, i === k ? "rule" : gClass(t), ids[i])));
+  if (k < 0) {                // the halted head merges with nothing: the tape decodes to itself
+    g.halted = true;
+    $("g-enc-note").textContent = "Encoding splits this tape into single characters: no merge rule pairs Ⓒ with a cell.";
+    $("g-rule").innerHTML = "No token holds two characters, so no rule applies: state C has none.";
+    $("g-dec-note").textContent = "Every id prints its own character, so the tape comes back unchanged. The loop sees that and stops.";
+    $("g-dec").replaceChildren(...toks.map((t) => gChip(t, gClass(t))));
+    const n = gNumber(after);
+    gGuideStatus(`halted: ${g.num} + 1 = ${n} (${parseInt(g.num, 2)} + 1 = ${parseInt(n, 2)})`, "ok");
+    clearInterval(gTimer); gTimer = 0; $("g-play").textContent = "Play";
+    gLines(["enc", "dec", "stop"]);
+    gRender();
+    return;
+  }
+  const w = toks[k], chars = Array.from(w), mi = chars.findIndex((c) => g.m.markerOf[c]);
+  const [q] = g.m.markerOf[chars[mi]], cell = chars[1 - mi];
+  const read = cell === LEFT || cell === RIGHT ? "_" : cell;
+  const [, , b, d, n] = g.table.find((r) => r[0] === q && r[1] === read);
+  const out = g.tok.decode([ids[k]], { skip_special_tokens: false });
+  const raw = g.added.get(ids[k]);
+  const move = { R: "move right", L: "move left", S: "stay put" }[d];
+  const next = n === q ? `stay in ${q}` : `switch to ${n} (${JOBS[n]})`;
+  const edge = cell === RIGHT ? ", past the end of the tape" : cell === LEFT ? ", before the start of the tape" : "";
+  $("g-enc-note").textContent = `Encoding splits the tape into tokens, each with an id. ${chars[mi]} is the head, and merges with the cell it reads: ${w} is one token.`;
+  $("g-rule").innerHTML = `Token <b>${w}</b> has id <b>${ids[k]}</b>, and that id is one rule: in state ${q} (${JOBS[q]}), reading ${read === "_" ? "a blank" : read}${edge}, write ${b === "_" ? "a blank" : b}, ${move} and ${next}.`;
+  const tagged = raw.length > out.length;
+  $("g-dec-note").textContent = `Every character prints itself; id ${ids[k]} prints ${out}${tagged ? " (it is stored with an invisible tag, which the decoder deletes)" : ""}. The head ${d === "S" ? "stays where it was" : `has moved one cell ${d === "R" ? "right" : "left"}`}${n === "C" ? ", and Ⓒ has no rules" : ""}.`;
+  $("g-dec").replaceChildren(...toks.map((t, i) => {
+    if (i !== k) return gChip(t, gClass(t));
+    const s = gChip("", "wrote"); s.append(gHead(out)); s.title = "the rule's output"; return s;
+  }));
+  const at = toks.slice(0, k).join("").length;
+  g.tape = after;
+  g.trace.push([after, at, at + out.length]);
+  gLines(["enc", "dec", "next"]);
+  gGuideStatus(`step ${g.trace.length - 1}`);
+  gRender();
+}
+
+function gRender() {
+  $("g-calls").innerHTML = `Calls the loop has made: <b>${g.calls}</b> encode${g.calls === 1 ? "" : "s"}, <b>${g.calls}</b> decode${g.calls === 1 ? "" : "s"}`;
+  $("g-trace").replaceChildren(...g.trace.map(([t, a, z], i) => {
+    const s = document.createElement("span");
+    if (i === g.trace.length - 1) s.className = "now";
+    const no = document.createElement("i"); no.textContent = i;
+    const m = document.createElement("mark"); m.textContent = t.slice(a, z);
+    s.append(no, t.slice(0, a), ...(z > a ? [m] : []), t.slice(z));
+    return s;
+  }));
+  $("g-next").disabled = g.halted;
+}
+
+function gSetup() {
+  const table = parseTable(GUIDE), m = turing(table, "_"), sp = spec(m.chars, m.rules);
+  g = { table, m, tok: new PTT(sp, CONFIG), added: new Map(sp.added_tokens.map((t) => [t.id, t.content])) };
+  $("g-rules").textContent = m.rules.size;
+  $("g-next").addEventListener("click", () => { clearInterval(gTimer); gTimer = 0; $("g-play").textContent = "Play"; gStep(); });
+  $("g-restart").addEventListener("click", gReset);
+  $("g-num").addEventListener("change", gReset);
+  $("g-play").addEventListener("click", () => {
+    if (gTimer) { clearInterval(gTimer); gTimer = 0; $("g-play").textContent = "Play"; return; }
+    if (g.halted) gReset();
+    $("g-play").textContent = "Pause";
+    gStep();
+    gTimer = setInterval(gStep, 1400);
+  });
+  gReset();
+}
+
+// ---- the case study: the same word, lowercased and tokenized by this browser ----
+$("sig-lower").textContent = "ΟΔΟΣ".toLowerCase();
+$("sig-run").addEventListener("click", async () => {
+  const out = $("sig-live");
+  $("sig-run").disabled = true;
+  out.textContent = "loading mBERT's tokenizer.json (1.7 MB) from the Hub…";
+  try {
+    const { AutoTokenizer, env } = await import(TJS);
+    env.allowLocalModels = false;
+    const tok = await AutoTokenizer.from_pretrained("google-bert/bert-base-multilingual-uncased", { revision: "7cbf9a625e29989f6b9c6c2fa68234c304f7e38f" });
+    const toks = tok.tokenize("ΟΔΟΣ"), ids = tok.encode("ΟΔΟΣ", { add_special_tokens: false }).map(Number);
+    const same = ids.join() === "295,42501";
+    out.textContent = `transformers.js 3.7.6 here: ${toks.join(" ")} → ${ids.join(" ")}${same ? ", the browser's ids above" : ""}`;
+  } catch (e) {
+    out.textContent = `could not load it (${e.message})`;
+    $("sig-run").disabled = false;
+  }
+});
+
 setup();
 $("progbox").hidden = false;
 try {
-  ({ PreTrainedTokenizer: PTT } = await import("https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.6/dist/transformers.min.js"));
+  ({ PreTrainedTokenizer: PTT } = await import(TJS));
   if (!("DecompressionStream" in window)) throw new Error("this browser cannot unpack the tokenizer files");
+  gSetup();
   caSetup();
   await choose(MACHINES[0]);
 } catch (e) {
+  gGuideStatus("transformers.js did not load, so the tokenizer can't run here", "err");
   status(`transformers.js did not load, so the tokenizer can't run here (${e.message})`, "err");
   for (const b of document.querySelectorAll("button")) b.disabled = true;
 }
