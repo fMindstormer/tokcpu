@@ -36,6 +36,13 @@ MODELS = {   # repo -> pooling, as each model's sentence-transformers config say
     "BAAI/bge-small-en-v1.5": "cls",
     "google-bert/bert-base-multilingual-uncased": "mean",
 }
+REVISION = {   # the commits the experiment ran on (October 2026), so a rerun reads the same files
+    "sentence-transformers/all-MiniLM-L6-v2": "1110a243fdf4706b3f48f1d95db1a4f5529b4d41",
+    "BAAI/bge-small-en-v1.5": "5c38ec7c405ec4b44b94cc5a9bb96e735b38267a",
+    "google-bert/bert-base-multilingual-uncased": "7cbf9a625e29989f6b9c6c2fa68234c304f7e38f",
+    "facebook/belebele": "7899cdfa4e1e0d733fd77c848e2c273cb1d32be2",
+    "HuggingFaceFW/fineweb-2": "af9c13333eb981300149d5ca60a8e9d659b276b9",
+}
 LONGEST = {"sentence-transformers/all-MiniLM-L6-v2": 256}   # sentence-transformers' max_seq_length; else 512
 WEB_PAGES = 5000
 # A capital sigma that JavaScript lowercases to ς: after a cased letter, and not before one (Unicode's
@@ -52,13 +59,14 @@ def texts() -> list[dict]:
     from huggingface_hub import hf_hub_download
     import pyarrow.parquet as pq
     rows = []
-    belebele = [json.loads(l) for l in open(hf_hub_download("facebook/belebele", "data/ell_Grek.jsonl", repo_type="dataset"), encoding="utf-8")]
+    belebele = [json.loads(l) for l in open(hf_hub_download("facebook/belebele", "data/ell_Grek.jsonl", repo_type="dataset", revision=REVISION["facebook/belebele"]), encoding="utf-8")]
     passages = list(dict.fromkeys(r["flores_passage"] for r in belebele))
     for variant, f in (("as written", str), ("capitals", caps)):
         rows += [{"source": "belebele", "kind": "passage", "id": f"p{i}", "variant": variant, "text": f(p)} for i, p in enumerate(passages)]
         rows += [{"source": "belebele", "kind": "question", "id": f"q{i}", "variant": variant, "text": f(r["question"]),
                   "passage": f"p{passages.index(r['flores_passage'])}"} for i, r in enumerate(belebele)]
-    web = pq.read_table(hf_hub_download("HuggingFaceFW/fineweb-2", "data/ell_Grek/test/000_00000.parquet", repo_type="dataset"),
+    web = pq.read_table(hf_hub_download("HuggingFaceFW/fineweb-2", "data/ell_Grek/test/000_00000.parquet", repo_type="dataset",
+                                        revision=REVISION["HuggingFaceFW/fineweb-2"]),
                         columns=["id", "text"]).slice(0, WEB_PAGES).to_pylist()
     rows += [{"source": "fineweb-2", "kind": "web page", "id": w["id"], "variant": "as written", "text": w["text"]} for w in web]
     for r in rows:
@@ -75,8 +83,8 @@ def pairs(out: Path, node: str = "node", log=print) -> list[dict]:
     js = Node(node, "tj4")
     try:
         for repo in MODELS:
-            d = Path(hf_hub_download(repo, "tokenizer.json")).parent
-            hf_hub_download(repo, "tokenizer_config.json")
+            d = Path(hf_hub_download(repo, "tokenizer.json", revision=REVISION[repo])).parent
+            hf_hub_download(repo, "tokenizer_config.json", revision=REVISION[repo])
             tok = Tokenizer.from_file(str(d / "tokenizer.json"))
             tok.no_truncation()
             tok.no_padding()
@@ -122,7 +130,7 @@ class Embedder:
         import torch
         from transformers import AutoModel
         self.torch = torch
-        self.model = AutoModel.from_pretrained(repo).eval()
+        self.model = AutoModel.from_pretrained(repo, revision=REVISION[repo]).eval()
         self.pooling = MODELS[repo]
         self.longest = LONGEST.get(repo, 512)
 

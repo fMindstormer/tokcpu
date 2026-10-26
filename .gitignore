@@ -17,3 +17,6 @@ build/
 web/compat/data/
 effect/results.json
 effect/figure.png
+
+repro/mbert/
+repro/node_modules/

@@ -10,8 +10,10 @@ tags:
 
 # Tokenizer CPU
 
-A stock Hugging Face tokenizer that runs Brainfuck. It is a plain `tokenizer.json`, with no custom
-code and no model (no `trust_remote_code`). Every clock tick is one encode and one decode:
+A stock Hugging Face tokenizer that executes programs. Its merge rules select a machine transition;
+decoding writes the next state. Repeating encode and decode runs the computation, without a neural
+network. It is a plain `tokenizer.json`, with no custom code (no `trust_remote_code`). Every clock tick
+is one encode and one decode:
 
 ```python
 from huggingface_hub import hf_hub_download
@@ -44,12 +46,18 @@ changing.
 
 The full explanation, the compiler and the tests are on GitHub: https://github.com/fMindstormer/tokcpu
 
+Tag `v1.0` of this repo holds the same tokenizer files as the
+[v1.0 release](https://github.com/fMindstormer/tokcpu/releases/tag/v1.0) on GitHub, which adds a
+minimal runner, the expected results, checksums, and a reproduction of a tokenizer disagreement between
+Python and JavaScript.
+
 ## What's in this repo
 
 | Folder | Machine | Merge rules |
 |---|---|---:|
 | (root) | universal Brainfuck interpreter: runs any program written on the tape | 17,210 |
 | `hello`, `alphabet`, `grid`, `jumps` | one Brainfuck program compiled into each tokenizer | 24,173 – 38,265 |
+| `increment` | adds one to a binary number: `start.txt` holds 1011, which becomes 1100 after 8 ticks | 16 |
 | `4-state-busy-beaver` | the 4-state busy beaver: halts after 107 ticks with 13 ones | 24 |
 | `binary-counter` | counts in binary forever | 7 |
 | `sort` | a block cellular automaton: every two-letter block of the tape is rewritten in one tick, sorting it | 704 |

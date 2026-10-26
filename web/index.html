@@ -147,6 +147,10 @@ input[type="text"].num { flex: 0 0 7rem; }
 .key span::before { content: ""; display: inline-block; width: 0.8em; height: 0.8em; border-radius: 2px; margin-right: 0.5em; vertical-align: -1px; }
 .key .tk::before { background: var(--head); }
 .key .lp::before { background: var(--line); border: 1px solid var(--muted); }
+.result { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.3rem 0.9rem; font: 700 1.25rem/1.3 var(--display); }
+.result small { font: 400 0.8rem var(--text); color: var(--muted); margin-right: 0.3em; }
+.result .dec { font-weight: 500; }
+.result .arrow { color: var(--head); }
 .calls { font-size: 0.84rem; color: var(--muted); }
 .calls b { color: var(--ink); font-variant-numeric: tabular-nums; }
 @keyframes pop { from { transform: translateY(-3px); opacity: 0.4; } }
@@ -218,6 +222,7 @@ while (nxt := <b>tok.decode(tok.encode(tape))</b>) != tape:
         <input type="text" class="num" id="g-num" value="1011" maxlength="8" inputmode="numeric" spellcheck="false" autocomplete="off" aria-describedby="g-num-note">
         <span class="small" id="g-num-note">in binary, up to 8 digits</span>
       </div>
+      <p class="result" id="g-result" aria-live="polite"></p>
       <div class="row">
         <button class="act" id="g-next">Next step</button>
         <button class="act ghost" id="g-play">Play</button>
@@ -963,6 +968,11 @@ function gHead(text) {          // the output of a rule, with its head character
   }
   return f;
 }
+function gResult(out) {        // the input, and the output once the machine halts, in binary and in decimal
+  const num = (b, label) => `<span><small>${label}</small>${b} <span class="dec">= ${parseInt(b, 2)}</span></span>`;
+  $("g-result").innerHTML = num(g.num, "Input") + '<span class="arrow" aria-label="becomes">→</span>'
+    + (out === null ? '<span class="dec">output when it halts</span>' : num(out, "Output"));
+}
 function gNumber(t) { return Array.from(t).filter((c) => c === "0" || c === "1").join(""); }
 function gGuideStatus(msg, cls = "") { const s = $("g-status"); s.textContent = msg; s.className = "status " + cls; }
 function gLines(on) {
@@ -981,6 +991,7 @@ function gReset() {
   $("g-rule").innerHTML = "Press <i>Next step</i> to encode this tape.";
   $("g-dec").replaceChildren();
   gLines(["init"]);
+  gResult(null);
   gGuideStatus("ready");
   gRender();
 }
@@ -1000,7 +1011,8 @@ function gStep() {
     $("g-dec-note").textContent = "Every id prints its own character, so the tape comes back unchanged. The loop sees that and stops.";
     $("g-dec").replaceChildren(...toks.map((t) => gChip(t, gClass(t))));
     const n = gNumber(after);
-    gGuideStatus(`halted: ${g.num} + 1 = ${n} (${parseInt(g.num, 2)} + 1 = ${parseInt(n, 2)})`, "ok");
+    gResult(n);
+    gGuideStatus(`halted after ${g.trace.length - 1} steps`, "ok");
     clearInterval(gTimer); gTimer = 0; $("g-play").textContent = "Play";
     gLines(["enc", "dec", "stop"]);
     gRender();

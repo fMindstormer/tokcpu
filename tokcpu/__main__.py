@@ -13,6 +13,7 @@
     python -m tokcpu report RESULTS [--previous OLD]   that JSON in Markdown, and what changed since OLD
     python -m tokcpu gguf --top 300                does llama.cpp tokenize Hub GGUFs like their base models?
     python -m tokcpu effect                        does a disagreement (final sigma) change embeddings and retrieval?
+    python -m tokcpu release v1.0 --hub-revision SHA   the frozen release bundle, into build/release/
 
 A run ticks `decode(encode(tape))` until the tape stops changing, or until it repeats every two ticks
 (a block automaton that has settled, see blocks.py). Nothing else touches the tape.
@@ -21,6 +22,7 @@ A run ticks `decode(encode(tape))` until the tape stops changing, or until it re
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import shutil
 import sys
@@ -35,7 +37,9 @@ PAGE = ("brainfuck", "hello", "4-state-busy-beaver", "binary-counter")     # mac
 
 
 def build(out: Path, web: bool = True) -> None:
-    jobs = [("binary-counter", *small.counter()), ("4-state-busy-beaver", *small.busy_beaver_4())]
+    m, tape = small.turing(small.INCREMENT, "increment", blank="_")
+    jobs = [("binary-counter", *small.counter()), ("4-state-busy-beaver", *small.busy_beaver_4()),
+            ("increment", m, tape[:-1] + "1011" + tape[-1])]
     for prog in sorted((ROOT / "programs").glob("*.bf")):
         if "," in prog.read_text():          # input needs the universal tokenizer
             continue
@@ -124,6 +128,10 @@ def main(argv=None) -> int:
     e = sub.add_parser("effect", help="feed Python's and transformers.js's ids for Greek text to the same models")
     e.add_argument("--out", default=str(ROOT / "effect"))
     e.add_argument("--node", default="node", help="the node binary, if the pairs need building")
+    v = sub.add_parser("release", help="the frozen release: tokenizers, tapes, expected results, runner, checksums")
+    v.add_argument("version", help="e.g. v1.0")
+    v.add_argument("--hub-revision", required=True, help="the Hub commit holding the same tokenizer files")
+    v.add_argument("--out", default=str(ROOT / "build" / "release"))
     p = sub.add_parser("report", help="summarise compat's results in Markdown")
     p.add_argument("results")
     p.add_argument("--previous", help="an earlier results file: list the models that changed since")
@@ -166,6 +174,11 @@ def main(argv=None) -> int:
         from .effect import effect
         effect(Path(a.out), a.node)
         print((Path(a.out) / "summary.md").read_text(), end="")
+        return 0
+    if a.cmd == "release":
+        from .release import release
+        z = release(a.version, a.hub_revision, Path(a.out))
+        print(f"{z}  sha256 {hashlib.sha256(z.read_bytes()).hexdigest()}")
         return 0
     if a.cmd == "report":
         from .compat import summary, tables

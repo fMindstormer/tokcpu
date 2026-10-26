@@ -2,8 +2,23 @@
 
 [![test](https://github.com/fMindstormer/tokcpu/actions/workflows/test.yml/badge.svg)](https://github.com/fMindstormer/tokcpu/actions/workflows/test.yml)
 
-A stock Hugging Face tokenizer that runs Brainfuck. It is a plain `tokenizer.json`, with no custom
-code and no model. Every clock tick is one encode and one decode:
+A stock Hugging Face tokenizer that executes programs. Its merge rules select a machine transition;
+decoding writes the next state. Repeating encode and decode runs the computation—without a neural
+network.
+
+The same construction provides a reference for testing tokenizer runtimes, revealing differences that
+change real models’ inputs and outputs.
+
+[![A 16-rule tokenizer adds one to 1011, one encode and one decode per step, and ends on 1100: 11 becomes 12](web/incrementer.gif)](https://fmindstormer.github.io/tokcpu/#guide)
+
+A 16-rule tokenizer adds one to the binary number 1011 (11) and ends on 1100 (12), after 8 transitions
+and 9 calls to encode and decode. In the first transition, encoding merges the head `ⓐ` with the `1`
+it reads into one token, id 36; that id is the rule "write 1, move right", and decoding it prints `1ⓐ`.
+
+[Watch one step](https://fmindstormer.github.io/tokcpu/#guide) ·
+[Run Brainfuck](https://fmindstormer.github.io/tokcpu/#machines-intro) ·
+[Explore runtime findings](https://fmindstormer.github.io/tokcpu/#finding) ·
+[Download](https://github.com/fMindstormer/tokcpu/releases/tag/v1.0)
 
 ```python
 from transformers import AutoTokenizer
@@ -13,28 +28,68 @@ while (nxt := tok.decode(tok.encode(tape))) != tape:
     tape = nxt
 ```
 
-Start the tape with a Brainfuck program written on it and the loop ends with the program's output
-written there too:
+The tokenizer is a plain `tokenizer.json`, with no custom code and no model. The same files are on the
+Hugging Face Hub as [fMindstormer/tokcpu](https://huggingface.co/fMindstormer/tokcpu), and the
+[interactive page](https://fmindstormer.github.io/tokcpu/) runs them in the browser with
+transformers.js.
+
+## Why this became useful
+
+The machines specify exactly what each tokenizer step should produce. Comparing implementations
+exposed disagreements in ordinary model tokenizers. In one controlled Greek retrieval experiment,
+changing only tokenizer IDs changed mBERT’s top-1 retrieval accuracy from 23.3% to 31.9%.
+
+- **The experiment:** 900 Greek questions from [Belebele](https://huggingface.co/datasets/facebook/belebele),
+  typed in capitals, each retrieving its passage among 488. Both sides use the same weights and the same
+  PyTorch code; only the ids differ. With Python's ids, mBERT ranks the right passage first for 23.3% of
+  the questions; with transformers.js's, 31.9%, the same as for the questions typed normally.
+- **The cause:** a capital Σ at the end of a word. Python's own `str.lower()` and JavaScript's
+  `toLowerCase` both follow Unicode and give ς. The Rust `tokenizers` library, which Python's
+  `transformers` uses, lowercases one character at a time and gives σ. So "Python's ids" here means the
+  Rust tokenizer used through Python, not Python's string lowercasing.
+- **Versions:** `tokenizers` 0.23.3 and `transformers` 5.20.2 against transformers.js 4.3.1, in October
+  2026; transformers.js 3.7.6 and tokenizers.js 0.2.0 give the same ids. The model and dataset revisions
+  are pinned in [`tokcpu/effect.py`](tokcpu/effect.py).
+- **Uncertain provenance:** which lowercasing mBERT was trained with is not known. Google's original
+  BERT tokenizer gives ς on Python 3 but σ on Python 2, and it ran on both.
+- **Reach:** 84 of the 500 most-downloaded Hub models that have a `tokenizer.json` differ this way
+  (BERT-style models such as `bert-base-uncased`, all-MiniLM, BGE, E5, and CLIP). The other differences
+  are on the [dashboard](https://fmindstormer.github.io/tokcpu/compat/), and the full experiment is
+  under [Does a disagreement change what the model does?](#does-a-disagreement-change-what-the-model-does)
+
+**Small reproduction** (a minute; mBERT's tokenizer only, 1.7 MB, no model weights; Node 22 or later):
 
 ```
-⊢Hello World!␊┃++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++.▼가║⠀⠀⡈⡤⡗⠡▲⠊⊣
- └── output ──┘ └──────────────────────────────── the program ───────────────────────────────────────┘  └─ memory ─┘
+cd repro
+pip install -r requirements.txt     # tokenizers 0.23.3, huggingface_hub
+python sigma.py                     # Python's side, at a pinned revision of mBERT's tokenizer
+npm ci && node sigma.mjs            # the same files in JavaScript, with tokenizers.js 0.2.0
 ```
 
-**On the Hugging Face Hub:** [fMindstormer/tokcpu](https://huggingface.co/fMindstormer/tokcpu), so
-`AutoTokenizer.from_pretrained("fMindstormer/tokcpu")` loads the universal tokenizer, with Hello World's
-tape in its `start.txt`.
+```
+Python's own str.lower():               οδος
+tokenizers 0.23.3 lowercasing (Rust):   οδοσ
+tokenizers 0.23.3, ΟΔΟΣ:                ο ##δο ##σ   [295, 37187, 62591]
+tokenizers 0.23.3, οδος (lowercase):    ο ##δος      [295, 42501]
+JavaScript's toLowerCase():             οδος
+tokenizers.js 0.2.0, ΟΔΟΣ:              ο ##δος      [295, 42501]
+```
 
-**Interactive page:** https://fmindstormer.github.io/tokcpu/ runs these same files in the browser with
-transformers.js, and compiles Turing machines you type into new tokenizers you can download. It starts
-with a 16-rule machine that adds one to a binary number, one step per click.
+**Full reproduction** (about 15 minutes on a laptop CPU, plus about 900 MB of model weights; no Node):
 
-**What it found:** because the machines say what every tick must give, they test the runtimes that read
-`tokenizer.json`. For 84 of the 500 most-downloaded Hub models that have one, the browser lowercases a
-word-final capital Σ to ς and Python to σ, so `ΟΔΟΣ` gets different ids. With mBERT, Greek questions
-typed in capitals then find the right passage first 23.3% of the time from Python's ids and 31.9% from
-the browser's ([the experiment](#does-a-disagreement-change-what-the-model-does)). Every other
-difference is on the [dashboard](https://fmindstormer.github.io/tokcpu/compat/).
+```
+pip install -r requirements.txt torch matplotlib pyarrow
+python -m tokcpu effect
+```
+
+It reads the paired ids in [`effect/pairs.jsonl.gz`](effect/pairs.jsonl.gz), embeds them with the three
+models at their pinned revisions, and writes [`effect/summary.md`](effect/summary.md) and the figure.
+The questions-in-capitals rows of the summary should match the numbers above.
+
+**Frozen release:** [v1.0](https://github.com/fMindstormer/tokcpu/releases/tag/v1.0) holds the
+incrementer and the universal Brainfuck tokenizer with their tapes and expected results, a minimal
+runner, this reproduction, and the 2026-10-19 compatibility results, with checksums. The same tokenizer
+files are on the Hub at tag [`v1.0`](https://huggingface.co/fMindstormer/tokcpu/tree/v1.0).
 
 ## How one tick works
 
@@ -54,6 +109,14 @@ state and reads the character beside it, on its right or its left depending on t
 
 A head at either end of the tape reads a blank, and its rules can grow the tape there, so the tape is
 as long as the program needs.
+
+Start the universal tokenizer's tape with a Brainfuck program written on it and the loop ends with the
+program's output written there too:
+
+```
+⊢Hello World!␊┃++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++.▼가║⠀⠀⡈⡤⡗⠡▲⠊⊣
+ └── output ──┘ └──────────────────────────────── the program ───────────────────────────────────────┘  └─ memory ─┘
+```
 
 ### The catch: steps would have to be reversible
 
@@ -474,6 +537,7 @@ python -m tokcpu run tokenizers/brainfuck programs/hello.bf
 python -m tokcpu run tokenizers/brainfuck programs/grid.bf --auto      # through AutoTokenizer
 python -m tokcpu run tokenizers/brainfuck programs/reverse.bf --input stressed
 python -m tokcpu run tokenizers/4-state-busy-beaver --show 1           # print every tick
+python -m tokcpu run tokenizers/increment --show 1        # the page's guided example: 1011 becomes 1100
 python -m tokcpu run tokenizers/hello                     # the compiled one; start.txt holds its tape
 python -m tokcpu run tokenizers/sort --show 2             # the block automaton, sorting a pangram
 python -m tokcpu ca tokenizers/rule110 --gens 24          # Rule 110, one row a generation
@@ -487,6 +551,11 @@ is deterministic and takes under a second, so git keeps only the small machines'
 `python -m tokcpu hub your-name/tokcpu` stages all of them as one Hub repo in `build/hub`: the universal
 tokenizer at the root, with Hello World's tape as `start.txt`, and the others in subfolders. `--push`
 uploads it.
+
+`python -m tokcpu release v1.0 --hub-revision SHA` writes the frozen release into `build/release/`: the
+incrementer and the universal tokenizer with their tapes, the expected final tapes (from the machines'
+own rules, not from a tokenizer library), `repro/run.py`, the final-sigma reproduction, a snapshot of
+the 2026-10-19 compatibility results, `SHA256SUMS`, and a zip of it all.
 
 ## Files
 
@@ -507,10 +576,12 @@ effect/               its paired dataset, summary and figure
 fuzz/                 the JavaScript runtimes for the fuzzer (runtimes.mjs) and compat (compat.mjs), pinned;
                       llama_tok.c, llama.cpp's tokenizer for gguf
 tokcpu/__main__.py    build, run, and stage the Hub repo
+tokcpu/release.py     the frozen release bundle
+repro/                run.py, the release's minimal runner; sigma.py and sigma.mjs, the small final-sigma reproduction
 tokcpu/hub_card.md    the Hub repo's model card
 programs/             hello, alphabet, grid, jumps, and reverse (reads input)
 tests/                the checks above, and the transformers.js runner
-web/                  the interactive page; `build` copies its tokenizers into web/tok/
+web/                  the interactive page; `build` copies its tokenizers into web/tok/; incrementer.gif, its guide recorded
 web/compat/           the dashboard, reading the tables `report --tables` writes into web/compat/data/
 web/tokcpu.js         the page's compiler: a Turing machine table or an elementary automaton -> tokenizer.json
 ```

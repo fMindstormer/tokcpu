@@ -369,3 +369,22 @@ def test_effect_pairs():
             if "js" in x:   # only a text with a word-final Σ is lowercased differently
                 assert r["finals"] > 0
     assert sum("js" in r["ids"][head["models"][0]] for r in belebele if r["variant"] == "as written") == 2
+
+
+def test_release_checks_itself(tmp_path):
+    """The release bundle's runner reproduces every expected result, and its checksums hold."""
+    import hashlib
+    import sys
+    import zipfile
+    from tokcpu.release import release
+    try:
+        z = release("vtest", "0" * 40, tmp_path)
+    except subprocess.CalledProcessError:
+        pytest.skip("the compat-results commit is not in this clone")
+    d = tmp_path / "tokcpu-vtest"
+    out = subprocess.run([sys.executable, str(d / "run.py"), "--check"], capture_output=True, text=True, cwd=tmp_path)
+    assert out.returncode == 0 and out.stdout.count("ok ") == 3, out.stdout + out.stderr
+    for line in (d / "SHA256SUMS").read_text().splitlines():
+        digest, name = line.split("  ")
+        assert hashlib.sha256((d / name).read_bytes()).hexdigest() == digest
+    assert "tokcpu-vtest/SHA256SUMS" in zipfile.ZipFile(z).namelist()
