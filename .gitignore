@@ -7,6 +7,7 @@ node_modules/
 tokenizers/*/tokenizer.json
 !tokenizers/binary-counter/tokenizer.json
 !tokenizers/4-state-busy-beaver/tokenizer.json
+!tokenizers/increment/tokenizer.json
 !tokenizers/sort/tokenizer.json
 !tokenizers/rule110/tokenizer.json
 !tokenizers/rule110-ether/tokenizer.json
