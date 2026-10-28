@@ -1,12 +1,12 @@
-# Tokenizer compatibility, 2026-10-27
+# Tokenizer compatibility, 2026-10-28
 
-`transformers` 5.21.0 and `tokenizers` 0.23.3 in Python against `transformers.js@3.7.6`, `transformers.js@4.3.1`, `@huggingface/tokenizers@0.2.0` on Node v22.23.4. Of the top 1000 models, 266 have a tokenizer.json (116 distinct files); 266 were checked on 42 texts.
+`transformers` 5.21.0 and `tokenizers` 0.23.3 in Python against `transformers.js@3.7.6`, `transformers.js@4.3.2`, `@huggingface/tokenizers@0.2.0` on Node v22.23.3. Of the top 1000 models, 267 have a tokenizer.json (116 distinct files); 267 were checked on 42 texts.
 
 | Runtime | Same | Differs | Cannot load | Same, by downloads |
 |---|---|---|---|---|
-| transformers.js@3.7.6 | 187 | 78 | 1 | 45.7% |
-| transformers.js@4.3.1 | 191 | 74 | 1 | 46.2% |
-| @huggingface/tokenizers@0.2.0 | 191 | 74 | 1 | 46.2% |
+| transformers.js@3.7.6 | 188 | 78 | 1 | 46.2% |
+| transformers.js@4.3.2 | 192 | 74 | 1 | 46.7% |
+| @huggingface/tokenizers@0.2.0 | 192 | 74 | 1 | 46.7% |
 
 Models affected, by cause:
 
@@ -20,12 +20,12 @@ Models affected, by cause:
 | throws on decode of no ids | 2 | 2 | 2 |
 | whitespace (U+FEFF, U+0085) | 36 | 32 | 32 |
 
-## Since 2026-10-19
+## Since 2026-10-27
 
-Changed: `transformers` 5.20.2 → 5.21.0; `node` v22.23.3 → v22.23.4. 265 models were checked both times.
+Changed: `node` v22.23.4 → v22.23.3; `transformers.js@4.3.1` → `transformers.js@4.3.2`. 263 models were checked both times.
 
 **transformers.js@3.7.6**: no change.
 
-**transformers.js@4.3.1**: no change.
+**transformers.js@4.3.2**: no change.
 
 **@huggingface/tokenizers@0.2.0**: no change.
