@@ -2,6 +2,7 @@
 Brainfuck output against a plain interpreter."""
 
 import json
+import math
 import random
 import shutil
 import struct
@@ -388,3 +389,19 @@ def test_release_checks_itself(tmp_path):
         digest, name = line.split("  ")
         assert hashlib.sha256((d / name).read_bytes()).hexdigest() == digest
     assert "tokcpu-vtest/SHA256SUMS" in zipfile.ZipFile(z).namelist()
+
+
+def test_nfc_summary():
+    """The NFC experiment's numbers, from made-up rows: accuracy, changed answers, token ratio, bits per character."""
+    from tokcpu import nfc
+    row = lambda gold, a, b, na, nb: {"gold": gold, "differs": a != b or na != nb, "python": a, "llama.cpp": b,
+                                      "nll python": na, "nll llama.cpp": nb, "tokens python": 10, "tokens llama.cpp": 30, "chars": 100}
+    rows = [row(0, 0, 1, 50.0, 90.0), row(2, 2, 2, 50.0, 70.0), row(1, 3, 3, 50.0, 50.0), row(3, 3, 0, 50.0, 80.0)]
+    s = nfc.stats(rows)
+    assert s["accuracy python"] == 0.75 and s["accuracy llama.cpp"] == 0.25 and s["answer changed"] == 0.5
+    assert s["differ"] == 3 and s["tokens"] == 3.0 and s["more surprising"] == 3
+    assert abs(s["bits python"] - 200 / 400 / math.log(2)) < 1e-9
+    results = {"llama.cpp": "llama.cpp@x", "tokenizers": "t", "transformers": "t", "questions per language": 4,
+               "models": {"Qwen/Q": {"languages": {"ben_Beng": {"setting": "as written", "questions": rows}}}}}
+    assert "| Q | ben_Beng | 3 of 4 | 3.00 | 75.0% | 25.0% | 0.5 | 50.0% |" in nfc.summary(results)
+    assert nfc.mcnemar(0, 0) == 1.0 and nfc.mcnemar(2, 0) == 0.5 and abs(nfc.mcnemar(10, 2) - 0.0386) < 1e-3

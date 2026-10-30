@@ -408,7 +408,7 @@ as "normalizer not applied" only if Python with the normalizer removed gives lla
 
 | Cause | GGUF repos | What happens |
 |---|---|---|
-| Normalizer not applied | 130 | Qwen 2 to 3.x ask for NFC; llama.cpp skips it, so a decomposed "é" (e + U+0301) tokenizes as two characters. Only decomposed text shows it (macOS file names, some pasted text), and 92 repos differ in nothing else |
+| Normalizer not applied | 130 | Qwen 2 to 3.x ask for NFC; llama.cpp skips it, so a decomposed "é" (e + U+0301) tokenizes as two characters. Among the 42 texts only decomposed ones show it (macOS file names, some pasted text), and 92 repos differ in nothing else; ordinary Bengali, Punjabi, Odia, Hindi and Yoruba text shows it too (see [below](#does-llamacpps-missing-nfc-change-what-a-model-does)) |
 | Special-looking text | 33 | In Qwen 2 and 3 (the `qwen2` pre-tokenizer), llama.cpp turns a literal `</s>` in the text into a control token when it parses special tokens, as llama-server does for prompts. The GGUF and Python both have it as an ordinary token |
 | BOS | 26 | llama.cpp adds `<bos>` where tokenizer.json does not: 24 Gemma 4 repos (whose chat template writes `<bos>` itself), LFM2.5-Audio and a MiniCPM5 |
 | Decode clean-up | 13 | GLM, LFM2.5, Granite 4.1, Nemotron: llama.cpp decodes `a !== null` as `a!== null`, the old `clean_up_tokenization_spaces`, which 12 of these 13 models turn off |
@@ -507,6 +507,55 @@ Node. Each row holds a text and, per model, Python's ids and transformers.js's i
 cut to the first 512. A web page is kept under its FineWeb-2 id rather than its text, and only if its ids
 differ. Delete the file to build it again; that needs Node 22 and `cd fuzz && npm install`.
 
+## Does llama.cpp's missing NFC change what a model does?
+
+Yes: badly for text that arrives decomposed, and measurably for ordinary Bengali. `python -m tokcpu nfc`
+(`tokcpu/nfc.py`) measures the largest llama.cpp difference above, the NFC normalizer it skips for Qwen 2
+to 3.x, in Qwen2.5-1.5B-Instruct and Qwen3-1.7B. Each prompt is a Belebele multiple-choice question in the
+model's chat template, tokenized by Python (`tokenizers`, from the model's tokenizer.json) and by
+llama.cpp 0.7.0 (from the official GGUF's vocabulary). Both id sequences go through the same model,
+weights and PyTorch code, so the tokenizer is the only difference; the model's answer is the most likely
+of A to D. There are two settings:
+
+- **As written.** NFC changes ordinary text in some languages: it splits letters such as Bengali য়
+  (U+09DF, into য + ়), and composes or reorders marks. Over all of Belebele, the passages whose ids
+  differ in llama.cpp (with Qwen2.5's vocabulary) are 474 of 488 in Assamese, 465 in Bengali, 449 in Punjabi, 345 in Yoruba, 268 in
+  Odia, 137 in Hindi, 95 in Burmese, and about 30 in several Arabic varieties. None of the GGUF
+  campaign's 42 texts held such letters.
+- **Arriving decomposed (NFD)**, as macOS file names and some copied text do. Python composes it back;
+  llama.cpp does not.
+
+![Belebele accuracy with Python's ids and with llama.cpp's, by language, for two Qwen models](effect/nfc/figure.svg)
+
+**Decomposed text breaks the models.** In NFD, Vietnamese and Korean take 2.7 to 2.9 times as many
+tokens in llama.cpp. Korean falls to chance and Vietnamese most of the way there: Qwen2.5 drops from 71%
+to 40% in Vietnamese and from 69% to 25% in Korean, Qwen3 from 64% to 34% and from 54% to 25%, and 46% to
+68% of the answers change. In French and German, where only accented letters split, 6.5% to 19% of
+answers change but accuracy does not move significantly.
+
+**Ordinary text changes less.** In Bengali, every prompt differs and 23% of answers change in both
+models. Qwen3's accuracy falls from 44.5% to 36.5%: 23 questions only Python's ids get right, against 7
+only llama.cpp's (p = 0.005, exact McNemar test). Qwen2.5's falls from 46.5% to 44.0%, which is not
+significant. In Punjabi, Odia, Hindi and Yoruba, 1% to 13.5% of answers change and accuracy does not move
+significantly. These small models answer these languages only somewhat above chance (25%), which leaves
+accuracy little room to fall.
+
+**The model notices nearly every time.** In 3,049 of the 3,066 prompts whose ids differ, the model finds
+llama.cpp's version more surprising (a higher negative log-likelihood); 16 of the 17 exceptions are
+Yoruba. Bengali goes from 1.65 to 2.07 bits per character in Qwen2.5, and Korean in NFD from 1.9 to
+5.4. The English control differs in no prompt.
+
+Which side is right is clearer than for final sigma: the tokenizer.json, which defines the model's ids,
+asks for NFC, and the surprise numbers say llama.cpp's ids are ones the model has rarely seen. Two
+limits: llama.cpp users run quantized weights, while this uses the full-precision model to isolate the
+tokenizer; and it covers two small models and the first 200 questions of each language.
+[`effect/nfc/summary.md`](effect/nfc/summary.md) has every number, with token counts and p-values, and
+`results.json` every question.
+
+The experiment needs `pip install torch matplotlib` and `brew install llama.cpp`. It downloads about 7 GB
+of weights at pinned revisions and took 2 hours 45 minutes on an Apple M4's GPU. It saves after each
+language, so an interrupted run picks up where it stopped.
+
 ## Checking it
 
 `python -m pytest tests` (about a minute; CI runs it on every push):
@@ -571,6 +620,7 @@ tokcpu/compat.py      the same runtimes against Python on real Hub tokenizers, a
 tokcpu/gguf.py        llama.cpp against Python on Hub GGUFs, from their headers alone
 tokcpu/effect.py      does final sigma change embeddings and retrieval? (figure.py draws it)
 effect/               its paired dataset, summary and figure
+tokcpu/nfc.py         does llama.cpp's missing NFC change Qwen's answers? Results in effect/nfc/
 .github/workflows/    the tests on every push; compat.yml, the top 1,000 again on each new release; pages.yml,
                       web/ and the dashboard on GitHub Pages
 fuzz/                 the JavaScript runtimes for the fuzzer (runtimes.mjs) and compat (compat.mjs), pinned;

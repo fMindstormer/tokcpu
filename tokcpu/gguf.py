@@ -173,11 +173,11 @@ def gguf_files(api, repo: str) -> list[str]:
     return [f.path for f in sorted(files, key=lambda f: f.size)]
 
 
-def fetch_vocab(repo: str, file: str, to: Path) -> dict:
+def fetch_vocab(repo: str, file: str, to: Path, revision: str | None = None) -> dict:
     """Save the GGUF's header as `to`/vocab.gguf; its keys and values."""
     from huggingface_hub import HfFileSystem
     fs = HfFileSystem()
-    with fs.open(f"{repo}/{file}", "rb", block_size=0) as f:
+    with fs.open(f"{repo}@{revision}/{file}" if revision else f"{repo}/{file}", "rb", block_size=0) as f:
         def read(start, end):
             f.seek(start)
             return f.read(end - start)
