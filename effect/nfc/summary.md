@@ -29,3 +29,7 @@ llama.cpp@0.7.0 against `tokenizers` 0.23.3 (`transformers` 5.22.0); the first 2
 | Qwen3-1.7B | kor_Hang | 200 of 200 | 2.86 | 54.0% | 24.5% | 3.8e-13 | 46.0% | 2.277 → 7.381 | 200 of 200 |
 | Qwen3-1.7B | fra_Latn | 200 of 200 | 1.14 | 68.0% | 68.0% | 1 | 17.0% | 0.973 → 1.346 | 200 of 200 |
 | Qwen3-1.7B | deu_Latn | 200 of 200 | 1.11 | 62.0% | 63.0% | 0.83 | 19.0% | 1.128 → 1.312 | 200 of 200 |
+
+### The fix
+
+Normalizing the text to NFC before llama.cpp tokenizes it gives Python's exact ids for 4,000 of 4,000 prompts (every model, language and setting above).

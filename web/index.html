@@ -174,6 +174,8 @@ input[type="text"].num { flex: 0 0 7rem; }
 .facts b { display: block; font: 700 1.35rem/1.15 var(--display); font-variant-numeric: tabular-nums; }
 .links { display: flex; flex-wrap: wrap; gap: 0.4rem 1.3rem; font-size: 0.92rem; }
 #sig-live { font: 0.8rem/1.6 var(--mono); }
+.tape .c.byte { font-size: 0.72rem; }
+#nfc-live { font: 600 0.8rem var(--mono); }
 
 /* the write-up */
 main.wrap { display: grid; gap: 2.6rem; padding-block: 2.4rem 3.5rem; }
@@ -372,6 +374,57 @@ while (nxt := <b>tok.decode(tok.encode(tape))</b>) != tape:
       <a href="https://github.com/fMindstormer/tokcpu/blob/main/effect/summary.md">Every number</a>
       <a href="compat/?q=final%20sigma">The 84 models</a>
       <a href="compat/">All 500 models and every other difference</a>
+    </div>
+  </div>
+
+  <div class="case" id="nfc">
+    <div class="stage">
+      <span class="kicker">And in llama.cpp</span>
+      <h2>llama.cpp skips a step Qwen's tokenizer asks for, and answers change</h2>
+    </div>
+    <p>llama.cpp, and Ollama and LM Studio built on it, never read <code>tokenizer.json</code>: the GGUF file carries the vocabulary, and llama.cpp's own code does the rest. The same checks, run on the most-downloaded GGUF repos, found that llama.cpp skips the NFC normalization Qwen 2 and 3 ask for. NFC is usually explained with accents, but it also rewrites ordinary letters in Bengali, Punjabi, Odia and Hindi.</p>
+    <div class="case-grid">
+      <div>
+        <span class="kicker">The smallest input</span>
+        <p><span class="word" lang="bn">হয়</span></p>
+        <p>"Is", one of the commonest words in Bengali, through the tokenizer of <a href="https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct">Qwen2.5-1.5B-Instruct</a>. Its last letter, য়, is typed as one character, U+09DF. NFC always splits it in two: য and a dot below (U+09BC).</p>
+        <div class="versus">
+          <span class="who">Python<small>applies NFC</small></span>
+          <div class="tape ids" lang="bn"><span class="c">হ<small>148291</small></span><span class="c cell">য<small>146834</small></span><span class="c cell byte">E0 A6<small>11125</small></span><span class="c cell byte">BC<small>120</small></span></div>
+          <span class="who">llama.cpp<small>skips it</small></span>
+          <div class="tape ids" lang="bn"><span class="c">হ<small>148291</small></span><span class="c bad">য়<small>149527</small></span></div>
+        </div>
+        <p>The dot has no token of its own, so Python spells it in two byte pieces. llama.cpp's single token looks tidier, but Python never produces it: NFC splits the letter before tokenizing, every time. The model's own <code>tokenizer.json</code> asks for NFC, and the model finds llama.cpp's version more surprising almost every time (below).</p>
+        <p class="small">This browser's NFC splits it the same way: U+09DF becomes <b id="nfc-live">…</b>.</p>
+      </div>
+      <div>
+        <span class="kicker">What it does to answers</span>
+        <p>Belebele again: a passage, a question and four options in the model's chat template; the answer is the likeliest of A to D. Both id sequences go through the same weights and PyTorch code. 200 questions per language, as written and decomposed (NFD), the form macOS file names and some copied text arrive in: Python composes it back, llama.cpp does not.</p>
+        <p class="small">Accuracy with Python's ids → with llama.cpp's. Chance is 25%.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Text</th><th>Qwen2.5-1.5B</th><th>Qwen3-1.7B</th></tr></thead>
+          <tbody>
+            <tr><td>Korean, decomposed</td><td class="num">69.0% → 25.0%</td><td class="num">54.0% → 24.5%</td></tr>
+            <tr><td>Vietnamese, decomposed</td><td class="num">71.0% → 40.0%</td><td class="num">64.0% → 34.0%</td></tr>
+            <tr><td>Bengali, as written</td><td class="num">46.5% → 44.0%</td><td class="num">44.5% → 36.5%</td></tr>
+            <tr><td>French, decomposed</td><td class="num">80.0% → 78.0%</td><td class="num">68.0% → 68.0%</td></tr>
+            <tr><td>English, as written</td><td class="num">84.5% → 84.5%</td><td class="num">81.0% → 81.0%</td></tr>
+          </tbody>
+        </table></div>
+        <p>Decomposed Korean falls to chance. In Bengali as written, 23% of answers change in both models, and Qwen3 loses 8 points: 23 questions only Python's ids get right, against 7 only llama.cpp's (p = 0.005). Qwen2.5's fall in Bengali is not significant, nor is any change in French, German, Punjabi, Odia, Hindi or Yoruba. English, the control, gives the same ids.</p>
+      </div>
+    </div>
+    <div class="facts">
+      <div><b>130 of 192</b>top GGUF repos checked differ this way: Qwen 2 to 3.x, whose <code>tokenizer.json</code> asks for NFC</div>
+      <div><b>3,049 of 3,066</b>prompts whose ids differ are more surprising to the model with llama.cpp's ids</div>
+      <div><b>465 of 488</b>Bengali passages in Belebele tokenize differently as written; 449 in Punjabi, 268 in Odia</div>
+    </div>
+    <p><b>If you run these models in llama.cpp:</b> normalize text to NFC before it reaches the tokenizer, with <code>unicodedata.normalize("NFC", text)</code> in Python or <code>text.normalize("NFC")</code> in JavaScript. For all 4,000 prompts here, that gives llama.cpp exactly Python's ids.</p>
+    <p class="small">Tested in October 2026: llama.cpp 0.7.0, with the vocabularies of Qwen's official GGUFs, against <code>tokenizers</code> 0.23.3 and <code>transformers</code> 5.22.0. Both id sequences ran through the full-precision model in PyTorch, to isolate the tokenizer; llama.cpp users run quantized weights. Two small models and the first 200 questions of each language.</p>
+    <div class="links">
+      <a href="https://github.com/fMindstormer/tokcpu#does-llamacpps-missing-nfc-change-what-a-model-does">The full experiment and method</a>
+      <a href="https://github.com/fMindstormer/tokcpu/blob/main/effect/nfc/summary.md">Every number</a>
+      <a href="https://github.com/fMindstormer/tokcpu#llamacpp-and-gguf">Every llama.cpp difference</a>
     </div>
   </div>
 
@@ -1075,6 +1128,7 @@ function gSetup() {
 
 // ---- the case study: the same word, lowercased and tokenized by this browser ----
 $("sig-lower").textContent = "ΟΔΟΣ".toLowerCase();
+$("nfc-live").textContent = [..."য়".normalize("NFC")].map(c => "U+" + c.codePointAt(0).toString(16).toUpperCase().padStart(4, "0")).join(" ");
 $("sig-run").addEventListener("click", async () => {
   const out = $("sig-live");
   $("sig-run").disabled = true;

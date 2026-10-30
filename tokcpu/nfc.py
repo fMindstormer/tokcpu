@@ -15,7 +15,8 @@ Each prompt is a Belebele multiple-choice question in the model's chat template,
 Python (`tokenizers`, from the model's tokenizer.json) and by llama.cpp (the GGUF's vocabulary only, through
 fuzz/llama_tok.c). Both id sequences go through the same model, weights and code (PyTorch), so the
 tokenizer is the only thing that differs. For each: the answer the model gives (the most likely of A-D
-after the prompt) and how surprised it is by the prompt (bits per character).
+after the prompt) and how surprised it is by the prompt (bits per character). Last, the fix: whether normalizing
+the text to NFC before llama.cpp tokenizes it gives Python's exact ids.
 
     python -m tokcpu nfc       writes effect/nfc/summary.md, results.json and figure.svg (needs torch,
                                matplotlib and llama.cpp; downloads about 7 GB of weights; 2 hours 45 minutes on an Apple M4's GPU)
@@ -87,6 +88,15 @@ class Reader:
         return answer, nll
 
 
+def load(llama, gguf_repo: str, gguf_file: str, gguf_rev: str, tmp: str) -> None:
+    """Load a GGUF's vocabulary (its header only) into llama.cpp."""
+    from .gguf import fetch_vocab
+    fetch_vocab(gguf_repo, gguf_file, Path(tmp), revision=gguf_rev)
+    loaded = llama.ask("load", dir=tmp)
+    if loaded["errors"]:
+        raise RuntimeError(f"llama.cpp cannot load {gguf_repo}: {loaded['errors']}")
+
+
 def measure(out: Path, log=print) -> dict:
     """Every model and language, saved to out/results.json after each language; a rerun keeps what is there."""
     import tempfile
@@ -107,11 +117,7 @@ def measure(out: Path, log=print) -> dict:
             tok = AutoTokenizer.from_pretrained(repo, revision=rev)
             reader = Reader(repo, tok)
             with tempfile.TemporaryDirectory() as tmp:
-                from .gguf import fetch_vocab
-                fetch_vocab(gguf_repo, gguf_file, Path(tmp), revision=gguf_rev)
-                loaded = llama.ask("load", dir=tmp)
-                if loaded["errors"]:
-                    raise RuntimeError(f"llama.cpp cannot load {gguf_repo}: {loaded['errors']}")
+                load(llama, gguf_repo, gguf_file, gguf_rev, tmp)
                 for setting, langs in SETTINGS.items():
                     for lang in langs:
                         if lang in m["languages"]:
@@ -134,6 +140,29 @@ def measure(out: Path, log=print) -> dict:
     finally:
         llama.close()
     return results
+
+
+def fixed(results: dict, log=print) -> None:
+    """The fix: does normalizing the text to NFC before llama.cpp tokenizes it give Python's exact ids? Counts the
+    prompts that match, per model and language, into results. Tokenizers only, no model: about two minutes."""
+    import tempfile
+    from transformers import AutoTokenizer
+    from .gguf import Llama
+    llama = Llama()
+    try:
+        for repo, (rev, gguf_repo, gguf_file, gguf_rev) in MODELS.items():
+            tok = AutoTokenizer.from_pretrained(repo, revision=rev)
+            with tempfile.TemporaryDirectory() as tmp:
+                load(llama, gguf_repo, gguf_file, gguf_rev, tmp)
+                for setting, langs in SETTINGS.items():
+                    for lang in langs:
+                        texts = [prompt(tok, r, setting) for r in questions(lang)]
+                        same = sum(llama._encode(unicodedata.normalize("NFC", t)) == tok.encode(t, add_special_tokens=False)
+                                   for t in texts)
+                        results["models"][repo]["languages"][lang]["same ids with NFC first"] = same
+                        log(f"{repo} {lang} ({setting}): NFC first, {same} of {len(texts)} prompts get Python's ids")
+    finally:
+        llama.close()
 
 
 def mcnemar(b: int, c: int) -> float:
@@ -183,6 +212,12 @@ def summary(results: dict) -> str:
                              f"{s['accuracy python']:.1%} | {s['accuracy llama.cpp']:.1%} | {s['p']:.2g} | {s['answer changed']:.1%} | "
                              f"{s['bits python']:.3f} → {s['bits llama.cpp']:.3f} | {s['more surprising']} of {s['differ']} |")
         lines.append("")
+    langs = [d for m in results["models"].values() for d in m["languages"].values()]
+    if langs and all("same ids with NFC first" in d for d in langs):
+        same = sum(d["same ids with NFC first"] for d in langs)
+        lines += ["### The fix", "",
+                  f"Normalizing the text to NFC before llama.cpp tokenizes it gives Python's exact ids for {same:,} of "
+                  f"{sum(len(d['questions']) for d in langs):,} prompts (every model, language and setting above).", ""]
     return "\n".join(lines)
 
 
@@ -250,6 +285,8 @@ def figure(results: dict, out: Path) -> None:
 def nfc(out: Path, log=print) -> dict:
     out.mkdir(parents=True, exist_ok=True)
     results = measure(out, log)
+    fixed(results, log)
+    (out / "results.json").write_text(json.dumps(results))
     (out / "summary.md").write_text(summary(results))
     figure(results, out / "figure.svg")
     return results

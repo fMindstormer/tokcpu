@@ -552,6 +552,10 @@ tokenizer; and it covers two small models and the first 200 questions of each la
 [`effect/nfc/summary.md`](effect/nfc/summary.md) has every number, with token counts and p-values, and
 `results.json` every question.
 
+**The fix is one line.** Normalize text to NFC before llama.cpp tokenizes it: `unicodedata.normalize("NFC", text)`
+in Python, `text.normalize("NFC")` in JavaScript. For all 4,000 prompts here, both models, every language,
+as written and decomposed, llama.cpp then gives exactly Python's ids; the command checks this last.
+
 The experiment needs `pip install torch matplotlib` and `brew install llama.cpp`. It downloads about 7 GB
 of weights at pinned revisions and took 2 hours 45 minutes on an Apple M4's GPU. It saves after each
 language, so an interrupted run picks up where it stopped.

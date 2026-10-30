@@ -404,4 +404,7 @@ def test_nfc_summary():
     results = {"llama.cpp": "llama.cpp@x", "tokenizers": "t", "transformers": "t", "questions per language": 4,
                "models": {"Qwen/Q": {"languages": {"ben_Beng": {"setting": "as written", "questions": rows}}}}}
     assert "| Q | ben_Beng | 3 of 4 | 3.00 | 75.0% | 25.0% | 0.5 | 50.0% |" in nfc.summary(results)
+    assert "The fix" not in nfc.summary(results)
+    results["models"]["Qwen/Q"]["languages"]["ben_Beng"]["same ids with NFC first"] = 4
+    assert "Python's exact ids for 4 of 4 prompts" in nfc.summary(results)
     assert nfc.mcnemar(0, 0) == 1.0 and nfc.mcnemar(2, 0) == 0.5 and abs(nfc.mcnemar(10, 2) - 0.0386) < 1e-3
