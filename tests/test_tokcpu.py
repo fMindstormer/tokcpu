@@ -408,3 +408,19 @@ def test_nfc_summary():
     results["models"]["Qwen/Q"]["languages"]["ben_Beng"]["same ids with NFC first"] = 4
     assert "Python's exact ids for 4 of 4 prompts" in nfc.summary(results)
     assert nfc.mcnemar(0, 0) == 1.0 and nfc.mcnemar(2, 0) == 0.5 and abs(nfc.mcnemar(10, 2) - 0.0386) < 1e-3
+
+
+def test_bos_summary():
+    """The extra-<bos> experiment's tables, from made-up rows: per language, pooled, and the endpoint counts."""
+    from tokcpu import bos
+    row = lambda a, b, nb: {"gold": 0, "differs": True, "only the bos": True, "python": a, "llama.cpp": b,
+                            "nll python": 50.0, "nll llama.cpp": nb, "tokens python": 10, "tokens llama.cpp": 11, "chars": 100}
+    results = {"llama.cpp": "llama.cpp@x", "tokenizers": "t", "transformers": "t", "model": "g/m", "gguf": "g/m-GGUF/m.gguf",
+               "questions per language": 2,
+               "settings": {"chat template": {"eng_Latn": [row(0, 1, 60.0), row(0, 0, 40.0)], "deu_Latn": [row(1, 1, 50.0), row(0, 0, 70.0)]}},
+               "server": {"llama-server": "b1", "python tokens": 187, "same prompt": True,
+                          "prompt tokens": {"/v1/chat/completions": 187, "/completion": 188}}}
+    s = bos.summary(results)
+    assert "| English | 2 of 2 | 100.0% | 50.0% | 1 | 50.0% |" in s
+    assert "| All | 4 of 4 | 75.0% | 50.0% | 1 | 25.0% |" in s and "| 2 of 4 |" in s
+    assert "| 187 | 1 |" in s and "| 188 | 2 |" in s

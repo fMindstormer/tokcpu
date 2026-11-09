@@ -14,6 +14,7 @@
     python -m tokcpu gguf --top 300                does llama.cpp tokenize Hub GGUFs like their base models?
     python -m tokcpu effect                        does a disagreement (final sigma) change embeddings and retrieval?
     python -m tokcpu nfc                           does llama.cpp's missing NFC normalization change a model's answers?
+    python -m tokcpu bos                           does llama.cpp's extra <bos> change Gemma 4's answers?
     python -m tokcpu release v1.0 --hub-revision SHA   the frozen release bundle, into build/release/
 
 A run ticks `decode(encode(tape))` until the tape stops changing, or until it repeats every two ticks
@@ -131,6 +132,8 @@ def main(argv=None) -> int:
     e.add_argument("--node", default="node", help="the node binary, if the pairs need building")
     n = sub.add_parser("nfc", help="feed Python's and llama.cpp's ids for text NFC changes to the same Qwen models")
     n.add_argument("--out", default=str(ROOT / "effect" / "nfc"))
+    o = sub.add_parser("bos", help="feed Python's and llama.cpp's ids, which differ by a <bos>, to the same Gemma 4 model")
+    o.add_argument("--out", default=str(ROOT / "effect" / "bos"))
     v = sub.add_parser("release", help="the frozen release: tokenizers, tapes, expected results, runner, checksums")
     v.add_argument("version", help="e.g. v1.0")
     v.add_argument("--hub-revision", required=True, help="the Hub commit holding the same tokenizer files")
@@ -181,6 +184,11 @@ def main(argv=None) -> int:
     if a.cmd == "nfc":
         from .nfc import nfc
         nfc(Path(a.out))
+        print((Path(a.out) / "summary.md").read_text(), end="")
+        return 0
+    if a.cmd == "bos":
+        from .bos import bos
+        bos(Path(a.out))
         print((Path(a.out) / "summary.md").read_text(), end="")
         return 0
     if a.cmd == "release":

@@ -51,9 +51,14 @@ def questions(lang: str) -> list[dict]:
     return [json.loads(line) for line in open(path, encoding="utf-8")][:QUESTIONS]
 
 
-def prompt(tok, r: dict, setting: str) -> str:
-    body = (f"{r['flores_passage']}\n\nQuestion: {r['question']}\n"
+def mc(r: dict) -> str:
+    """A Belebele question as text: the passage, the question and the four options."""
+    return (f"{r['flores_passage']}\n\nQuestion: {r['question']}\n"
             + "".join(f"{c}. {r[f'mc_answer{i}']}\n" for i, c in zip(range(1, 5), "ABCD")))
+
+
+def prompt(tok, r: dict, setting: str) -> str:
+    body = mc(r)
     if setting == "decomposed":
         body = unicodedata.normalize("NFD", body)
     extra = {"enable_thinking": False} if "Qwen3" in tok.name_or_path else {}
@@ -64,26 +69,32 @@ def prompt(tok, r: dict, setting: str) -> str:
 class Reader:
     """A causal LM that answers a prompt's question and says how surprised it was by the prompt."""
 
-    def __init__(self, repo: str, tok):
+    def __init__(self, repo: str, tok, revision: str, dtype: str = "float16"):
         import torch
         from transformers import AutoModelForCausalLM
         self.torch = torch
         self.device = "mps" if torch.backends.mps.is_available() else "cuda" if torch.cuda.is_available() else "cpu"
-        dtype = torch.float32 if self.device == "cpu" else torch.float16
-        self.model = AutoModelForCausalLM.from_pretrained(repo, revision=MODELS[repo][0], dtype=dtype).to(self.device).eval()
+        dtype = torch.float32 if self.device == "cpu" else getattr(torch, dtype)
+        self.model = AutoModelForCausalLM.from_pretrained(repo, revision=revision, dtype=dtype).to(self.device).eval()
         self.letters = [tok.convert_tokens_to_ids(c) for c in "ABCD"]
+        self.cap = getattr(self.model.config.get_text_config(), "final_logit_softcapping", None)   # Gemma squashes its logits
 
-    def __call__(self, ids: list[int]) -> tuple[int, float]:
-        """(the option it picks, 0-3; the prompt's negative log-likelihood in nats)."""
+    def logits(self, h):
+        z = self.model.lm_head(h).float()
+        return self.torch.tanh(z / self.cap) * self.cap if self.cap else z
+
+    def __call__(self, ids: list[int], letters: list[int] | None = None, scored: int | None = None) -> tuple[int, float]:
+        """(the option it picks, 0-3; the negative log-likelihood in nats of the prompt's last `scored` tokens,
+        by default all but the first)."""
         torch = self.torch
         x = torch.tensor([ids], device=self.device)
         with torch.no_grad():
             h = self.model.model(input_ids=x).last_hidden_state[0]
-            head = self.model.lm_head
-            answer = int(head(h[-1:])[0, self.letters].float().argmax())
+            answer = int(self.logits(h[-1:])[0, letters or self.letters].argmax())
             nll = 0.0
-            for s in range(0, len(ids) - 1, 512):   # the vocabulary is 151,936 wide: score in slices
-                logits = head(h[s:min(s + 512, len(ids) - 1)]).float()
+            start = 0 if scored is None else len(ids) - 1 - scored
+            for s in range(start, len(ids) - 1, 512):   # the vocabulary is 151,936 wide or more: score in slices
+                logits = self.logits(h[s:min(s + 512, len(ids) - 1)])
                 nll += float(torch.nn.functional.cross_entropy(logits, x[0, s + 1:s + 1 + len(logits)], reduction="sum"))
         return answer, nll
 
@@ -115,7 +126,7 @@ def measure(out: Path, log=print) -> dict:
             if all(lang in m["languages"] for langs in SETTINGS.values() for lang in langs):
                 continue
             tok = AutoTokenizer.from_pretrained(repo, revision=rev)
-            reader = Reader(repo, tok)
+            reader = Reader(repo, tok, rev)
             with tempfile.TemporaryDirectory() as tmp:
                 load(llama, gguf_repo, gguf_file, gguf_rev, tmp)
                 for setting, langs in SETTINGS.items():
