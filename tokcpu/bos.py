@@ -147,8 +147,8 @@ ENDPOINTS = {"/v1/chat/completions": "`/v1/chat/completions`, which renders the 
              "/completion": "`/completion`, given the prompt the template renders in Python",
              "/v1/completions": "`/v1/completions`, the same"}
 
-HEADS = {"chat template": "Chat template: Python's ids start with one <bos>, llama.cpp's with two",
-         "plain text": "Plain text: Python's ids have no <bos>, llama.cpp's have one"}
+HEADS = {"chat template": "Chat template: Python's ids start with one `<bos>`, llama.cpp's with two",
+         "plain text": "Plain text: Python's ids have no `<bos>`, llama.cpp's have one"}
 
 
 def summary(results: dict) -> str:
@@ -157,7 +157,7 @@ def summary(results: dict) -> str:
              "Belebele questions of each language.", ""]
     for setting, langs in results["settings"].items():
         lines += [f"### {HEADS[setting]}", "",
-                  "| Language | Ids differ only by the <bos> | Accuracy, Python | Accuracy, llama.cpp | p (McNemar) | Answer changed | Bits per character, Python → llama.cpp | More surprising with llama.cpp's ids |",
+                  "| Language | Ids differ only by the `<bos>` | Accuracy, Python | Accuracy, llama.cpp | p (McNemar) | Answer changed | Bits per character, Python → llama.cpp | More surprising with llama.cpp's ids |",
                   "|---|---|---|---|---|---|---|---|"]
         for name, rows in [(NAMES.get(lang, lang), rows) for lang, rows in langs.items()] + [("All", [r for rows in langs.values() for r in rows])]:
             s = stats(rows)
@@ -167,11 +167,11 @@ def summary(results: dict) -> str:
         lines.append("")
     if "server" in results:
         sv = results["server"]
-        lines += ["### Which llama-server endpoints send two <bos>", "",
+        lines += ["### Which llama-server endpoints send two `<bos>`", "",
                   f"llama-server {sv['llama-server']}, the first English question. Python's ids for it are {sv['python tokens']} "
-                  "tokens, with one <bos>" + ("; llama-server renders the same prompt." if sv["same prompt"] else
+                  "tokens, with one `<bos>`" + ("; llama-server renders the same prompt." if sv["same prompt"] else
                                              "; llama-server renders a different prompt, so its counts are not comparable."), "",
-                  "| Endpoint | Prompt tokens | <bos> tokens |", "|---|---|---|"]
+                  "| Endpoint | Prompt tokens | `<bos>` tokens |", "|---|---|---|"]
         for path, n in sv["prompt tokens"].items():
             lines.append(f"| {ENDPOINTS[path]} | {n} | {n - sv['python tokens'] + 1} |")
         lines.append("")
