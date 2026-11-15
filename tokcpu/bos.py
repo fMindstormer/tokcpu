@@ -17,7 +17,7 @@ Python's ids but the first, so the <bos> is the only thing that differs. For eac
 (the most likely of A-D) and how surprised it is by the prompt (bits per character).
 
     python -m tokcpu bos       writes effect/bos/summary.md and results.json (needs torch and llama.cpp;
-                               downloads about 13 GB; about an hour on an Apple M4's GPU)
+                               transformers 5; downloads about 13 GB; 36 minutes on an Apple M4's GPU)
 """
 
 from __future__ import annotations

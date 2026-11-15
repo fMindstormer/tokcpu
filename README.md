@@ -410,7 +410,7 @@ as "normalizer not applied" only if Python with the normalizer removed gives lla
 |---|---|---|
 | Normalizer not applied | 130 | Qwen 2 to 3.x ask for NFC; llama.cpp skips it, so a decomposed "é" (e + U+0301) tokenizes as two characters. Among the 42 texts only decomposed ones show it (macOS file names, some pasted text), and 92 repos differ in nothing else; ordinary Bengali, Punjabi, Odia, Hindi and Yoruba text shows it too (see [below](#does-llamacpps-missing-nfc-change-what-a-model-does)) |
 | Special-looking text | 33 | In Qwen 2 and 3 (the `qwen2` pre-tokenizer), llama.cpp turns a literal `</s>` in the text into a control token when it parses special tokens, as llama-server does for prompts. The GGUF and Python both have it as an ordinary token |
-| BOS | 26 | llama.cpp adds `<bos>` where tokenizer.json does not: 24 Gemma 4 repos (whose chat template writes `<bos>` itself), LFM2.5-Audio and a MiniCPM5 |
+| BOS | 26 | llama.cpp adds `<bos>` where tokenizer.json does not: 24 Gemma 4 repos (whose chat template writes `<bos>` itself), LFM2.5-Audio and a MiniCPM5; what that does to Gemma 4 is measured [below](#does-llamacpps-extra-bos-change-what-gemma-4-does) |
 | Decode clean-up | 13 | GLM, LFM2.5, Granite 4.1, Nemotron: llama.cpp decodes `a !== null` as `a!== null`, the old `clean_up_tokenization_spaces`, which 12 of these 13 models turn off |
 | Hindi and Thai | 10 | Qwen 3.5, gpt-oss, Llama 4, Nemotron: a virama or vowel sign lands in a different piece (स्त against स + ्त) |
 | `\r\n` | 4 | Laguna: one token in Python, two in llama.cpp |
@@ -560,6 +560,66 @@ The experiment needs `pip install torch matplotlib` and `brew install llama.cpp`
 of weights at pinned revisions and took 2 hours 45 minutes on an Apple M4's GPU. It saves after each
 language, so an interrupted run picks up where it stopped.
 
+## Does llama.cpp's extra BOS change what Gemma 4 does?
+
+Yes, both ways. A second `<bos>` costs Gemma 4 six points of accuracy, while for text with no template,
+llama.cpp's one `<bos>` nearly doubles it. `python -m tokcpu bos` (`tokcpu/bos.py`) measures the BOS
+difference above in google/gemma-4-E2B-it. Gemma 4's tokenizer.json adds no `<bos>`, because its chat
+template writes one; llama.cpp adds one anyway. The method is the NFC experiment's: the first 200 Belebele
+questions in English, German, Hindi and Chinese, tokenized by Python and by llama.cpp, and both id
+sequences through the same weights in PyTorch (bfloat16, since Gemma overflows float16). Both are scored on
+the same tokens, so the extra `<bos>` is the only difference. There are two settings:
+
+- **Chat template.** The prompt as the template renders it, `<bos>` included. Python's ids start with one
+  `<bos>`, llama.cpp's with two.
+- **Plain text.** The same question as a completion ending in "Answer:", with no template. Python's ids
+  have no `<bos>`, llama.cpp's have one.
+
+**Which llama-server endpoints send two.** Two `<bos>` reach the model only when the program renders the
+template itself and hands llama.cpp the text. llama-server 0.7.0 (b11669) was asked the first English
+question three ways:
+
+- `/v1/chat/completions` renders the template itself, drops the template's `<bos>` and adds its own, so it
+  sends one, the same 187 tokens as Python.
+- `/completion` and `/v1/completions`, given the text the template renders in Python, send two (188) and
+  log a warning about it.
+
+The chat endpoint turns Gemma 4's thinking on by default; the counts above turn it off, as transformers'
+template does.
+
+| Setting | Accuracy, Python | Accuracy, llama.cpp | Only Python right | Only llama.cpp right | Answer changed | Bits per character, Python → llama.cpp |
+|---|---|---|---|---|---|---|
+| Chat template (one `<bos>` against two) | 71.0% | 65.0% | 59 | 11 | 11.2% | 1.886 → 1.817 |
+| Plain text (none against one) | 35.5% | 66.8% | 72 | 322 | 65.2% | 3.597 → 1.767 |
+
+The table covers all 800 questions in each setting.
+
+**Two `<bos>` hurt.** Accuracy falls in all four languages: from 80.5% to 71.5% in English, 69.5% to 61.5%
+in Chinese and 63.5% to 58.5% in Hindi (p = 0.0003, 0.0001 and 0.02, exact McNemar test). German's
+70.5% to 68.5% is not significant. Over all 800 questions p = 4.5 × 10⁻⁹, and 11% of answers change.
+Unlike NFC, surprise points the other way: llama.cpp's ids are *less* surprising in 794 of 800 prompts,
+though only by about 4%. So here a lower negative log-likelihood on the prompt does not mean the model reads
+it better.
+
+**No `<bos>` hurts more.** Without a template, Python's ids carry no `<bos>`, and Gemma 4 does little better
+than chance (25%): 35.5% against 66.8% with llama.cpp's `<bos>` (p = 7.7 × 10⁻³⁹). Bits per
+character halve, and every one of the 800 prompts is less surprising with llama.cpp's ids. Here llama.cpp
+is the right side: Gemma expects a `<bos>`. Python leaves it out only because the template is meant to
+write it.
+
+So neither tokenizer is right on its own. Gemma 4 wants exactly one `<bos>`. Text from the chat template
+should reach llama.cpp without it (llama-server's chat endpoint strips it), or be tokenized with
+`add_special=false`. Plain text sent through Python's tokenizer needs one added.
+
+Two limits: one small model, four languages and 200 questions each; and full-precision weights, where
+llama.cpp users run quantized ones. [`effect/bos/summary.md`](effect/bos/summary.md) has every number, and
+`results.json` every question.
+
+The experiment needs `pip install torch "transformers>=5"` (4.57 cannot load Gemma 4's tokenizer) and
+`brew install llama.cpp`. It downloads about 13 GB (10 GB of weights, and the 2.8 GB GGUF for
+llama-server), uses about 11 GB of memory and took 36 minutes, download included, on an Apple M4's GPU.
+It saves after each language, so an interrupted run picks up where it stopped.
+
 ## Checking it
 
 `python -m pytest tests` (about a minute; CI runs it on every push):
@@ -625,6 +685,7 @@ tokcpu/gguf.py        llama.cpp against Python on Hub GGUFs, from their headers 
 tokcpu/effect.py      does final sigma change embeddings and retrieval? (figure.py draws it)
 effect/               its paired dataset, summary and figure
 tokcpu/nfc.py         does llama.cpp's missing NFC change Qwen's answers? Results in effect/nfc/
+tokcpu/bos.py         does llama.cpp's extra <bos> change Gemma 4's answers? Results in effect/bos/
 .github/workflows/    the tests on every push; compat.yml, the top 1,000 again on each new release; pages.yml,
                       web/ and the dashboard on GitHub Pages
 fuzz/                 the JavaScript runtimes for the fuzzer (runtimes.mjs) and compat (compat.mjs), pinned;
