@@ -428,6 +428,53 @@ while (nxt := <b>tok.decode(tok.encode(tape))</b>) != tape:
     </div>
   </div>
 
+  <div class="case" id="bos">
+    <div class="stage">
+      <span class="kicker">And one token too many</span>
+      <h2>llama.cpp gives Gemma 4 a second &lt;bos&gt;, and accuracy falls</h2>
+    </div>
+    <p>A model's ids usually start with <code>&lt;bos&gt;</code>, a token that marks the beginning of the text. Gemma 4's chat template writes it itself, so its <code>tokenizer.json</code> adds none. llama.cpp adds one anyway. A program that renders the template and hands llama.cpp the text sends Gemma 4 two.</p>
+    <div class="case-grid">
+      <div>
+        <span class="kicker">The smallest input</span>
+        <p><span class="word">Hi</span></p>
+        <p>One word from the user, in the chat template of <a href="https://huggingface.co/google/gemma-4-E2B-it">gemma-4-E2B-it</a>, which turns it into <code>&lt;bos&gt;&lt;|turn&gt;user</code>, the word, and the start of the model's turn.</p>
+        <div class="versus">
+          <span class="who">Python<small>one &lt;bos&gt;</small></span>
+          <div class="tape ids"><span class="c">&lt;bos&gt;<small>2</small></span><span class="c">&lt;|turn&gt;<small>105</small></span><span class="c">user<small>2364</small></span><span class="c">↵<small>107</small></span><span class="c">Hi<small>10979</small></span><span class="c">…</span></div>
+          <span class="who">llama.cpp<small>adds another</small></span>
+          <div class="tape ids"><span class="c">&lt;bos&gt;<small>2</small></span><span class="c bad">&lt;bos&gt;<small>2</small></span><span class="c">&lt;|turn&gt;<small>105</small></span><span class="c">user<small>2364</small></span><span class="c">↵<small>107</small></span><span class="c">Hi<small>10979</small></span><span class="c">…</span></div>
+        </div>
+        <p>llama-server's chat endpoint gets this right: it renders the template itself, drops the template's <code>&lt;bos&gt;</code> and sends one. Its <code>/completion</code> and <code>/v1/completions</code> endpoints, given text the template already rendered, send two.</p>
+      </div>
+      <div>
+        <span class="kicker">What it does to answers</span>
+        <p>Belebele again, as for Qwen: the same weights and PyTorch code read both id sequences, 200 questions each in English, German, Hindi and Chinese. Two settings: the chat template, and the same question as plain text ending in "Answer:", where Python's ids have no <code>&lt;bos&gt;</code> at all.</p>
+        <p class="small">Accuracy over 800 questions. With the template, Python's ids hold one &lt;bos&gt; and llama.cpp's two; with plain text, none and one. Chance is 25%.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Text</th><th>Python's ids</th><th>llama.cpp's ids</th></tr></thead>
+          <tbody>
+            <tr><td>Chat template</td><td class="num">71.0%</td><td class="num">65.0%</td></tr>
+            <tr><td>Plain text</td><td class="num">35.5%</td><td class="num">66.8%</td></tr>
+          </tbody>
+        </table></div>
+        <p>With the template, accuracy falls in every language, by 9 points in English and 8 in Chinese; German's 2 are not significant. Without a template, it is Python's ids that fail: with no <code>&lt;bos&gt;</code>, Gemma 4 does little better than chance. It wants exactly one, and neither tokenizer gives it one every time.</p>
+      </div>
+    </div>
+    <div class="facts">
+      <div><b>26 of 192</b>top GGUF repos checked add a <code>&lt;bos&gt;</code> that <code>tokenizer.json</code> does not; 24 of them are Gemma 4</div>
+      <div><b>59 against 11</b>questions only Python's ids get right, against only llama.cpp's, with the template (p = 4.5 × 10⁻⁹)</div>
+      <div><b>11%</b>of answers change with the second <code>&lt;bos&gt;</code>; 65% change when the only one is missing</div>
+    </div>
+    <p><b>If you run Gemma 4 in llama.cpp:</b> send messages to llama-server's chat endpoint, or, if you render the template yourself, tokenize the result with <code>add_special=false</code>. For plain text with no template, keep llama.cpp's <code>&lt;bos&gt;</code>.</p>
+    <p class="small">Tested in November 2026: llama.cpp 0.7.0 (llama-server b11669), with the vocabulary of ggml-org's GGUF, against <code>tokenizers</code> 0.23.3 and <code>transformers</code> 5.23.0. Both id sequences ran through the full-precision model in PyTorch (bfloat16), scored on the same tokens. One small model, four languages, the first 200 questions of each. The doubled prompt is slightly less surprising to the model, so here surprise does not say which side is right.</p>
+    <div class="links">
+      <a href="https://github.com/fMindstormer/tokcpu#does-llamacpps-extra-bos-change-what-gemma-4-does">The full experiment and method</a>
+      <a href="https://github.com/fMindstormer/tokcpu/blob/main/effect/bos/summary.md">Every number</a>
+      <a href="https://github.com/fMindstormer/tokcpu#llamacpp-and-gguf">Every llama.cpp difference</a>
+    </div>
+  </div>
+
   <section>
     <h2>One tick</h2>
     <p>The tape is a string. Exactly one character on it is the <b>head</b>: a marker that stands for a machine state and reads the character beside it. The tokenizer has one merge rule for every pair the head can form with a cell, and no other merges.</p>
