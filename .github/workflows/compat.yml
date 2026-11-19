@@ -21,6 +21,12 @@ permissions:
 
 concurrency: compat
 
+env:
+  # onnxruntime-node 1.21 (under transformers.js 3.x) downloads CUDA binaries from microsoft/onnxruntime's
+  # GitHub releases, which return 404 since that repo left GitHub (2026-11-18). The runners have no GPU,
+  # and the CPU binaries ship in the npm package.
+  ONNXRUNTIME_NODE_INSTALL_CUDA: skip
+
 jobs:
   compat:
     runs-on: ubuntu-latest
