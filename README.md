@@ -301,7 +301,7 @@ and writes each one as several tokenizers, one per feature of the format:
 For each feature a small model in `fuzz.py` says what a tick must give, written from the format's
 documented behaviour; a test checks every model against the Rust library first. Every tokenizer then
 runs in every runtime it finds: `tokenizers`, `transformers`, and, after `cd fuzz && npm install`,
-transformers.js 3.7.6 and 4.3.1 and `@huggingface/tokenizers` 0.2.0 (`--node` picks the Node binary).
+transformers.js 3.8.1 and 4.3.1 and `@huggingface/tokenizers` 0.2.0 (`--node` picks the Node binary).
 A disagreement is checked again in a fresh process, shrunk to a one-tick input, and kept with its
 tokenizer in `build/fuzz/`.
 
@@ -638,7 +638,7 @@ It saves after each language, so an interrupted run picks up where it stopped.
 - the page's own compiler (`web/tokcpu.js`) writes the same `tokenizer.json` as Python, byte for byte,
   for the busy beaver, 20 random machines and 30 automata.
 
-Tested with `tokenizers` 0.22 and 0.23, `transformers` 4.57 and 5.20, and transformers.js 3.7.6, on
+Tested with `tokenizers` 0.22 and 0.23, `transformers` 4.57 and 5.20, and transformers.js 3.7.6 and 3.8.1, on
 Python 3.13. CI also runs Python 3.10.
 
 ## Run it

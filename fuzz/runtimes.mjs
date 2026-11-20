@@ -11,10 +11,11 @@ import { Tokenizer } from "@huggingface/tokenizers";
 
 const ENC = { add_special_tokens: false };
 const DEC = { skip_special_tokens: false, clean_up_tokenization_spaces: false };
-const MAKERS = {
-  "transformers.js@3.7.6": (j, c) => new tj3.PreTrainedTokenizer(j, c),
-  "transformers.js@4.3.1": (j, c) => new tj4.PreTrainedTokenizer(j, c),
-  "@huggingface/tokenizers@0.2.0": (j, c) => new Tokenizer(j, c),
+const version = (dir) => JSON.parse(fs.readFileSync(new URL(`node_modules/${dir}/package.json`, import.meta.url), "utf8")).version;
+const MAKERS = {   // named by the version installed
+  [`transformers.js@${version("tj3")}`]: (j, c) => new tj3.PreTrainedTokenizer(j, c),
+  [`transformers.js@${version("tj4")}`]: (j, c) => new tj4.PreTrainedTokenizer(j, c),
+  [`@huggingface/tokenizers@${version("@huggingface/tokenizers")}`]: (j, c) => new Tokenizer(j, c),
 };
 const ids = (enc) => (Array.isArray(enc) ? enc : enc.ids);   // transformers.js returns ids, tokenizers.js an Encoding
 
@@ -47,7 +48,7 @@ const answer = {
     return res;
   },
   tick({ runtime, tape }) { return safe(() => tick(runtime, tape)); },
-  versions() { return { node: process.version, v8: process.versions.v8 }; },
+  versions() { return { node: process.version, v8: process.versions.v8, runtimes: Object.keys(MAKERS) }; },
 };
 
 const rl = readline.createInterface({ input: process.stdin });

@@ -438,10 +438,6 @@ class JsRuntimes:
         self.p.stdin.close()
         self.p.wait()
 
-    def versions(self) -> str:
-        v = self.ask(op="versions")
-        return f"node {v['node']}, V8 {v['v8']}"
-
 
 # ---- shrinking --------------------------------------------------------------------------------
 
@@ -488,8 +484,9 @@ def fuzz(cases: int, seed: int, out: Path, limit: int = 300, node: str = "node",
         shutil.rmtree(out)
     py = PyRuntimes()
     js = JsRuntimes(out / "node-stderr.log", node) if (ROOT / "fuzz" / "node_modules").exists() else None
-    names = list(py.makers) + (["transformers.js@3.7.6", "transformers.js@4.3.1", "@huggingface/tokenizers@0.2.0"] if js else [])
-    log(f"runtimes: {', '.join(names)}" + (f" ({js.versions()})" if js else ""))
+    jsv = js.ask(op="versions") if js else None
+    names = list(py.makers) + (jsv["runtimes"] if js else [])
+    log(f"runtimes: {', '.join(names)}" + (f" (node {jsv['node']}, V8 {jsv['v8']})" if js else ""))
     findings: dict[tuple, Finding] = {}
     load_errors: dict[tuple, Finding] = {}
     checked = ticks = 0
