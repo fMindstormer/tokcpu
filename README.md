@@ -354,7 +354,9 @@ differ on one rare character:
 | Throws | 3 | Decoding an empty list of ids throws instead of returning "" |
 
 On everyday text, only those three byte-fallback models and five others differ. transformers.js 3.7.6
-also drops the leading `▁` of Metaspace tokenizers with `prepend_scheme: "first"` (11 models), fixed in 4.
+also drops the leading `▁` of Metaspace tokenizers with `prepend_scheme: "first"` (11 models). 4.x fixed
+this, and so did 3.8.1: in the [2026-11-20 run](https://github.com/fMindstormer/tokcpu/blob/4fd2713/README.md),
+the cause is gone and Mistral-7B-Instruct v0.2 and v0.3 now match.
 
 The results are on a [dashboard](https://fmindstormer.github.io/tokcpu/compat/), and `--out` keeps them
 as JSON. The run takes about an hour, mostly waiting on the Hub's rate limit, and resumes where it stopped.
