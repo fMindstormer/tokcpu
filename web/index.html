@@ -582,11 +582,12 @@ python -m tokcpu check google-bert/bert-base-multilingual-uncased   # after cd f
     <p>The tokenizer folders load with <code>AutoTokenizer.from_pretrained</code>, so they can go on the Hugging Face Hub like any other. <code>check</code> compares any Hub model's tokenizer, or a folder holding one, across Python and the JavaScript runtimes.</p>
   </section>
 </main>
-<footer class="wrap">This page loads <code>tokenizer.json</code> files and runs them with transformers.js 3.7.6, the JavaScript port of Hugging Face Transformers. The labels on the head chip come from a small side file that names each state; the tokenizer itself does all the work.</footer>
+<footer class="wrap">This page loads <code>tokenizer.json</code> files and runs them with transformers.js 4.3.2, the JavaScript port of Hugging Face Transformers. The labels on the head chip come from a small side file that names each state; the tokenizer itself does all the work.</footer>
 
 <script type="module">
 import { parseTable, turing, spec, stringify, CONFIG, automaton, generation, caTable, ETHER, COLLISION } from "./tokcpu.js";
-const TJS = "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.6/dist/transformers.min.js";
+const TJS_VERSION = "4.3.2";
+const TJS = `https://cdn.jsdelivr.net/npm/@huggingface/transformers@${TJS_VERSION}/dist/transformers.min.js`;
 const $ = (id) => document.getElementById(id);
 const LEFT = "⊢", RIGHT = "⊣", OUT_END = "┃", PROG_END = "║", IP = "▼", DP = "▲";
 const HALF = "⓪①②③④⑤⑥⑦⑧⑨ⓐⓑⓒⓓⓔⓕ";   // a printed byte's high nibble, waiting for its low one
@@ -1186,7 +1187,7 @@ $("sig-run").addEventListener("click", async () => {
     const tok = await AutoTokenizer.from_pretrained("google-bert/bert-base-multilingual-uncased", { revision: "7cbf9a625e29989f6b9c6c2fa68234c304f7e38f" });
     const toks = tok.tokenize("ΟΔΟΣ"), ids = tok.encode("ΟΔΟΣ", { add_special_tokens: false }).map(Number);
     const same = ids.join() === "295,42501";
-    out.textContent = `transformers.js 3.7.6 here: ${toks.join(" ")} → ${ids.join(" ")}${same ? ", the browser's ids above" : ""}`;
+    out.textContent = `transformers.js ${TJS_VERSION} here: ${toks.join(" ")} → ${ids.join(" ")}${same ? ", the browser's ids above" : ""}`;
   } catch (e) {
     out.textContent = `could not load it (${e.message})`;
     $("sig-run").disabled = false;

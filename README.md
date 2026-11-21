@@ -423,6 +423,12 @@ Laguna's `\r\n`, plus the two BERT models. Beyond that, a umt5 text encoder diff
 pipelines that load it do their own tokenizing. llama.cpp also aborts, rather than returning an error, when
 asked to tokenize with a GGUF whose vocabulary type is `none` (an LFM2.5-Audio tokenizer file).
 
+Rechecked in November 2026 with llama.cpp 1.0.0, against 0.7.0 on the same 300 repos (the Hub's ranking had
+moved, so 175 could be checked in 0.7.0 and 184 in 1.0.0, which runs DeepSeek V4.1, LFM3 and flint). The
+missing NFC (125 repos), the special-looking text (27) and Gemma 4's extra BOS (18) are unchanged. The space
+clean-up is fixed in all but one repo (9 to 1), and so are gpt-oss's Hindi and Thai marks. 33 repos now match
+Python on every text, against 13 in 0.7.0.
+
 ## Does a disagreement change what the model does?
 
 A different id only matters if the model then does something different. `python -m tokcpu effect`
