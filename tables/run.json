@@ -1,1 +1,1 @@
-[{"generated": "2026-11-20", "runtimes": "transformers.js@3.8.1, transformers.js@4.3.2, @huggingface/tokenizers@0.2.0", "node": "v22.23.4", "v8": "12.4.254.21-node.57", "transformers": "5.23.0", "tokenizers": "0.23.3"}]
+[{"generated": "2026-11-21", "runtimes": "transformers.js@3.8.1, transformers.js@4.3.2, @huggingface/tokenizers@0.2.0", "node": "v22.23.5", "v8": "12.4.254.21-node.57", "transformers": "5.24.0", "tokenizers": "0.23.3"}]
